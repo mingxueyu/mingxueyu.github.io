@@ -1,5 +1,5 @@
 ---
-// CommentWidget.astro — 评论区（客户端渲染）
+// CommentWidget.astro — 评论区（客户端渲染，已修复 XSS）
 export interface Props {
   postSlug: string;
 }
@@ -22,6 +22,13 @@ const { postSlug } = Astro.props;
   const container = document.getElementById("comments")!;
   const postSlug = container.dataset.postSlug!;
 
+  // HTML 转义，防止 XSS
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
   async function loadComments() {
     const { data: comments, error } = await supabase
       .from("comments")
@@ -32,13 +39,12 @@ const { postSlug } = Astro.props;
     return { comments: comments || [], error };
   }
 
-  async function getDisplayName(userId: string) {
-    // 用 email 的 @ 前面部分作为显示名
+  async function getDisplayName(userId) {
     const { data } = await supabase.auth.getUser();
     if (data.user?.id === userId) {
-      return data.user.email?.split("@")[0] || "匿名";
+      return escapeHtml(data.user.email?.split("@")[0] || "匿名");
     }
-    return "用户" + userId.slice(0, 6);
+    return "用户" + escapeHtml(userId.slice(0, 6));
   }
 
   async function render() {
@@ -48,82 +54,137 @@ const { postSlug } = Astro.props;
 
     // 获取所有评论者的显示名
     const userIds = [...new Set(comments.map((c) => c.user_id))];
-    const nameMap: Record<string, string> = {};
+    const nameMap = {};
     for (const uid of userIds) {
       nameMap[uid] = await getDisplayName(uid);
     }
 
-    const commentsHtml =
-      comments.length === 0
-        ? `<p style="color: var(--color-muted);">暂无评论，来说两句吧</p>`
-        : comments
-            .map(
-              (c) => `
-            <div style="padding: 1rem 0; border-bottom: 1px solid var(--color-border);">
-              <div style="font-size: 0.85rem; color: var(--color-muted); margin-bottom: 0.35rem;">
-                <strong>${nameMap[c.user_id] || "用户"}</strong>
-                · ${new Date(c.created_at).toLocaleDateString("zh-CN", {
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </div>
-              <p style="margin: 0; white-space: pre-wrap;">${c.body}</p>
-            </div>
-          `
-            )
-            .join("");
+    const safeEmail = user ? escapeHtml(user.email) : "";
 
-    const formHtml = user
-      ? `
-        <form id="comment-form" style="margin-top: 1.5rem;">
-          <textarea id="comment-body" rows="3" placeholder="写下你的想法…" required
-                    style="width: 100%; padding: 0.75rem; border: 1px solid var(--color-border); border-radius: 8px; font-family: inherit; font-size: 0.95rem; resize: vertical;"></textarea>
-          <div style="display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem;">
-            <button type="submit"
-                    style="padding: 0.5rem 1.25rem; background: var(--color-accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.95rem;">
-              发表评论
-            </button>
-            <span style="font-size: 0.85rem; color: var(--color-muted);">已登录：${user.email}</span>
-          </div>
-          <p id="comment-msg" style="margin-top: 0.5rem; font-size: 0.9rem;"></p>
-        </form>`
-      : `
-        <div style="margin-top: 1.5rem; padding: 1rem; background: var(--color-border); border-radius: 8px; text-align: center;">
-          <a href="/about" style="color: var(--color-accent);">登录</a> 后发表评论
-        </div>`;
+    // 清空容器，用 DOM API 安全构建
+    container.innerHTML = "";
 
-    container.innerHTML = `
-      <h2 style="margin-top: 3rem; margin-bottom: 1rem;">评论 (${comments.length})</h2>
-      ${commentsHtml}
-      ${formHtml}
-    `;
+    // 标题
+    const title = document.createElement("h2");
+    title.style.cssText = "margin-top: 3rem; margin-bottom: 1rem;";
+    title.textContent = `评论 (${comments.length})`;
+    container.appendChild(title);
 
-    // 绑定表单事件
-    const form = document.getElementById("comment-form");
-    const msg = document.getElementById("comment-msg");
-    if (form && msg) {
+    // 评论列表
+    if (comments.length === 0) {
+      const empty = document.createElement("p");
+      empty.style.color = "var(--color-muted)";
+      empty.textContent = "暂无评论，来说两句吧";
+      container.appendChild(empty);
+    } else {
+      for (const c of comments) {
+        const wrapper = document.createElement("div");
+        wrapper.style.cssText =
+          "padding: 1rem 0; border-bottom: 1px solid var(--color-border);";
+
+        const meta = document.createElement("div");
+        meta.style.cssText =
+          "font-size: 0.85rem; color: var(--color-muted); margin-bottom: 0.35rem;";
+
+        const strong = document.createElement("strong");
+        strong.textContent = nameMap[c.user_id] || "用户";
+
+        meta.appendChild(strong);
+        meta.appendChild(
+          document.createTextNode(
+            ` · ${new Date(c.created_at).toLocaleDateString("zh-CN", {
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}`
+          )
+        );
+
+        const body = document.createElement("p");
+        body.style.cssText = "margin: 0; white-space: pre-wrap;";
+        body.textContent = c.body;
+
+        wrapper.appendChild(meta);
+        wrapper.appendChild(body);
+        container.appendChild(wrapper);
+      }
+    }
+
+    // 评论表单
+    if (user) {
+      const form = document.createElement("form");
+      form.id = "comment-form";
+      form.style.cssText = "margin-top: 1.5rem;";
+
+      const textarea = document.createElement("textarea");
+      textarea.id = "comment-body";
+      textarea.rows = 3;
+      textarea.placeholder = "写下你的想法…";
+      textarea.required = true;
+      textarea.style.cssText =
+        "width: 100%; padding: 0.75rem; border: 1px solid var(--color-border); border-radius: 8px; font-family: inherit; font-size: 0.95rem; resize: vertical;";
+
+      const row = document.createElement("div");
+      row.style.cssText =
+        "display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem;";
+
+      const btn = document.createElement("button");
+      btn.type = "submit";
+      btn.style.cssText =
+        "padding: 0.5rem 1.25rem; background: var(--color-accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.95rem;";
+      btn.textContent = "发表评论";
+
+      const span = document.createElement("span");
+      span.style.cssText =
+        "font-size: 0.85rem; color: var(--color-muted);";
+      span.textContent = `已登录：${safeEmail}`;
+
+      row.appendChild(btn);
+      row.appendChild(span);
+
+      const msg = document.createElement("p");
+      msg.id = "comment-msg";
+      msg.style.cssText = "margin-top: 0.5rem; font-size: 0.9rem;";
+
+      form.appendChild(textarea);
+      form.appendChild(row);
+      form.appendChild(msg);
+      container.appendChild(form);
+
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
-        const body = (document.getElementById("comment-body") as HTMLTextAreaElement).value.trim();
+        const body = textarea.value.trim();
         if (!body) return;
 
         msg.textContent = "发表中…";
         const { error } = await supabase.from("comments").insert({
           post_slug: postSlug,
-          user_id: user!.id,
+          user_id: user.id,
           body,
         });
 
         if (error) {
-          msg.innerHTML = `<span style="color: red;">发表失败：${error.message}</span>`;
+          msg.textContent = `发表失败：${error.message}`;
+          msg.style.color = "red";
         } else {
-          // 刷新评论列表
           render();
         }
       });
+    } else {
+      const loginBox = document.createElement("div");
+      loginBox.style.cssText =
+        "margin-top: 1.5rem; padding: 1rem; background: var(--color-border); border-radius: 8px; text-align: center;";
+
+      const link = document.createElement("a");
+      link.href = "/about";
+      link.style.color = "var(--color-accent)";
+      link.textContent = "登录";
+
+      loginBox.appendChild(link);
+      loginBox.appendChild(document.createTextNode(" 后发表评论"));
+      container.appendChild(loginBox);
     }
   }
 

@@ -7,7 +7,7 @@ export const GET = () =>
   rss({
     title: "我的博客",
     description: "个人博客",
-    site: import.meta.env.SITE || "https://your-username.github.io",
+    site: import.meta.env.SITE || "https://treefish.top",
     items: posts
       .filter((p) => !p.data.draft)
       .sort((a, b) => b.data.date.getTime() - a.data.date.getTime())

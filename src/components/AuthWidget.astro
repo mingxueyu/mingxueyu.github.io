@@ -1,5 +1,5 @@
 ---
-// AuthWidget.astro — 登录/注册组件（客户端渲染）
+// AuthWidget.astro — 登录/注册组件（客户端渲染，已修复 XSS）
 ---
 
 <div id="auth-widget" class="auth-widget">
@@ -16,92 +16,160 @@
 
   const container = document.getElementById("auth-widget")!;
 
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function showUser(email) {
+    container.innerHTML = "";
+    const h3 = document.createElement("h3");
+    h3.textContent = "✅ 已登录";
+    const p = document.createElement("p");
+    p.style.cssText = "margin-bottom: 0.75rem;";
+    p.textContent = email;
+    const btn = document.createElement("button");
+    btn.id = "btn-signout";
+    btn.style.cssText =
+      "padding: 0.5rem 1.5rem; background: var(--color-border); color: var(--color-text); border: none; border-radius: 6px; cursor: pointer; font-size: 0.95rem;";
+    btn.textContent = "退出登录";
+    btn.addEventListener("click", async () => {
+      await supabase.auth.signOut();
+      location.reload();
+    });
+
+    container.appendChild(h3);
+    container.appendChild(p);
+    container.appendChild(btn);
+  }
+
+  function showLoginForm() {
+    container.innerHTML = "";
+
+    const h3 = document.createElement("h3");
+    h3.textContent = "登录 / 注册";
+    container.appendChild(h3);
+
+    // GitHub 按钮
+    const ghBtn = document.createElement("button");
+    ghBtn.id = "btn-github";
+    ghBtn.style.cssText =
+      "display: block; width: 100%; max-width: 320px; margin: 0 auto 0.75rem; padding: 0.6rem; background: #24292e; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.95rem;";
+    ghBtn.textContent = "🐙 使用 GitHub 登录";
+    ghBtn.addEventListener("click", async () => {
+      await supabase.auth.signInWithOAuth({
+        provider: "github",
+        options: { redirectTo: window.location.origin + "/about" },
+      });
+    });
+    container.appendChild(ghBtn);
+
+    // 分隔线
+    const sep = document.createElement("div");
+    sep.style.cssText =
+      "display: flex; align-items: center; max-width: 320px; margin: 0 auto 0.75rem; gap: 0.5rem;";
+    sep.innerHTML =
+      '<hr style="flex: 1; border: none; border-top: 1px solid var(--color-border);" /><span style="color: var(--color-muted); font-size: 0.8rem;">或使用邮箱</span><hr style="flex: 1; border: none; border-top: 1px solid var(--color-border);" />';
+    container.appendChild(sep);
+
+    // 表单
+    const form = document.createElement("form");
+    form.id = "auth-form";
+    form.style.cssText =
+      "display: flex; flex-direction: column; gap: 0.5rem; max-width: 320px; margin: 0 auto;";
+
+    const emailInput = document.createElement("input");
+    emailInput.type = "email";
+    emailInput.id = "auth-email";
+    emailInput.placeholder = "邮箱地址";
+    emailInput.required = true;
+    emailInput.style.cssText =
+      "padding: 0.5rem; border: 1px solid var(--color-border); border-radius: 6px; font-size: 1rem;";
+
+    const pwInput = document.createElement("input");
+    pwInput.type = "password";
+    pwInput.id = "auth-password";
+    pwInput.placeholder = "密码（至少 6 位）";
+    pwInput.required = true;
+    pwInput.minLength = 6;
+    pwInput.style.cssText =
+      "padding: 0.5rem; border: 1px solid var(--color-border); border-radius: 6px; font-size: 1rem;";
+
+    const btnRow = document.createElement("div");
+    btnRow.style.cssText = "display: flex; gap: 0.5rem;";
+
+    const signInBtn = document.createElement("button");
+    signInBtn.type = "submit";
+    signInBtn.id = "btn-signin";
+    signInBtn.style.cssText =
+      "flex: 1; padding: 0.5rem; background: var(--color-accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.95rem;";
+    signInBtn.textContent = "登录";
+
+    const signUpBtn = document.createElement("button");
+    signUpBtn.type = "button";
+    signUpBtn.id = "btn-signup";
+    signUpBtn.style.cssText =
+      "flex: 1; padding: 0.5rem; background: var(--color-border); color: var(--color-text); border: none; border-radius: 6px; cursor: pointer; font-size: 0.95rem;";
+    signUpBtn.textContent = "注册";
+
+    btnRow.appendChild(signInBtn);
+    btnRow.appendChild(signUpBtn);
+
+    const msg = document.createElement("p");
+    msg.id = "auth-msg";
+    msg.style.cssText = "margin-top: 0.75rem; font-size: 0.9rem;";
+
+    form.appendChild(emailInput);
+    form.appendChild(pwInput);
+    form.appendChild(btnRow);
+    form.appendChild(msg);
+    container.appendChild(form);
+
+    // 登录
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = emailInput.value;
+      const password = pwInput.value;
+      msg.textContent = "登录中…";
+      msg.style.color = "";
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        msg.textContent = error.message;
+        msg.style.color = "red";
+      } else {
+        render();
+      }
+    });
+
+    // 注册
+    signUpBtn.addEventListener("click", async () => {
+      const email = emailInput.value;
+      const password = pwInput.value;
+      if (password.length < 6) {
+        msg.textContent = "密码至少 6 位";
+        msg.style.color = "red";
+        return;
+      }
+      msg.textContent = "注册中…";
+      msg.style.color = "";
+      const { error } = await supabase.auth.signUp({ email, password });
+      if (error) {
+        msg.textContent = error.message;
+        msg.style.color = "red";
+      } else {
+        msg.textContent = "注册成功！请检查邮箱确认。";
+        msg.style.color = "green";
+      }
+    });
+  }
+
   async function render() {
     const { data } = await supabase.auth.getUser();
-
     if (data.user?.email) {
-      container.innerHTML = `
-        <h3>✅ 已登录</h3>
-        <p style="margin-bottom: 0.75rem;">${data.user.email}</p>
-        <button id="btn-signout"
-                style="padding: 0.5rem 1.5rem; background: var(--color-border); color: var(--color-text); border: none; border-radius: 6px; cursor: pointer; font-size: 0.95rem;">
-          退出登录
-        </button>
-      `;
-      document.getElementById("btn-signout")!.addEventListener("click", async () => {
-        await supabase.auth.signOut();
-        location.reload();
-      });
+      showUser(data.user.email);
     } else {
-      container.innerHTML = `
-        <h3>登录 / 注册</h3>
-        <button id="btn-github"
-                style="display: block; width: 100%; max-width: 320px; margin: 0 auto 0.75rem; padding: 0.6rem; background: #24292e; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.95rem;">
-          🐙 使用 GitHub 登录
-        </button>
-        <div style="display: flex; align-items: center; max-width: 320px; margin: 0 auto 0.5rem; gap: 0.5rem;">
-          <hr style="flex: 1; border: none; border-top: 1px solid var(--color-border);" />
-          <span style="color: var(--color-muted); font-size: 0.8rem;">或使用邮箱</span>
-          <hr style="flex: 1; border: none; border-top: 1px solid var(--color-border);" />
-        </div>
-        <form id="auth-form" style="display: flex; flex-direction: column; gap: 0.5rem; max-width: 320px; margin: 0 auto;">
-          <input type="email" id="auth-email" placeholder="邮箱地址" required
-                 style="padding: 0.5rem; border: 1px solid var(--color-border); border-radius: 6px; font-size: 1rem;" />
-          <input type="password" id="auth-password" placeholder="密码（至少 6 位）" required minlength="6"
-                 style="padding: 0.5rem; border: 1px solid var(--color-border); border-radius: 6px; font-size: 1rem;" />
-          <div style="display: flex; gap: 0.5rem;">
-            <button type="submit" id="btn-signin"
-                    style="flex: 1; padding: 0.5rem; background: var(--color-accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.95rem;">
-              登录
-            </button>
-            <button type="button" id="btn-signup"
-                    style="flex: 1; padding: 0.5rem; background: var(--color-border); color: var(--color-text); border: none; border-radius: 6px; cursor: pointer; font-size: 0.95rem;">
-              注册
-            </button>
-          </div>
-          <p id="auth-msg" style="margin-top: 0.75rem; font-size: 0.9rem;"></p>
-        </form>
-      `;
-
-      // GitHub 登录
-      document.getElementById("btn-github")!.addEventListener("click", async () => {
-        await supabase.auth.signInWithOAuth({
-          provider: "github",
-          options: { redirectTo: window.location.origin + "/about" },
-        });
-      });
-
-      const form = document.getElementById("auth-form")!;
-      const msg = document.getElementById("auth-msg")!;
-
-      form.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const email = (document.getElementById("auth-email") as HTMLInputElement).value;
-        const password = (document.getElementById("auth-password") as HTMLInputElement).value;
-        msg.textContent = "登录中…";
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) {
-          msg.innerHTML = `<span style="color: red;">${error.message}</span>`;
-        } else {
-          render();
-        }
-      });
-
-      document.getElementById("btn-signup")!.addEventListener("click", async () => {
-        const email = (document.getElementById("auth-email") as HTMLInputElement).value;
-        const password = (document.getElementById("auth-password") as HTMLInputElement).value;
-        if (password.length < 6) {
-          msg.innerHTML = '<span style="color: red;">密码至少 6 位</span>';
-          return;
-        }
-        msg.textContent = "注册中…";
-        const { error } = await supabase.auth.signUp({ email, password });
-        if (error) {
-          msg.innerHTML = `<span style="color: red;">${error.message}</span>`;
-        } else {
-          msg.innerHTML = '<span style="color: green;">注册成功！请检查邮箱确认。</span>';
-        }
-      });
+      showLoginForm();
     }
   }
 

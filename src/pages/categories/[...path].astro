@@ -1,0 +1,121 @@
+---
+import { getCollection } from "astro:content";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+export async function getStaticPaths() {
+  const posts = await getCollection("blog");
+  const pathSet = new Set<string>();
+
+  for (const post of posts) {
+    if (post.data.draft) continue;
+    const cats = post.data.categories;
+    if (cats.length === 0) continue;
+
+    // 每个层级都生成一个路径：["技术","前端"] → 生成 "技术" 和 "技术/前端"
+    for (let i = 0; i < cats.length; i++) {
+      pathSet.add(cats.slice(0, i + 1).join("/"));
+    }
+  }
+
+  return [...pathSet].map((path) => ({
+    params: { path },
+  }));
+}
+
+const { path } = Astro.params;
+const segments = path!.split("/");
+const displayName = segments.join(" › ");
+
+const allPosts = (await getCollection("blog")).filter(
+  (p) => !p.data.draft
+);
+
+// 精确匹配：前 N 个分类完全一致
+const exactMatches = allPosts.filter((p) =>
+  p.data.categories.length >= segments.length &&
+  segments.every((seg, i) => p.data.categories[i] === seg)
+);
+
+// 查找子分类
+const children = new Map<string, number>();
+for (const p of exactMatches) {
+  if (p.data.categories.length > segments.length) {
+    const child = p.data.categories[segments.length];
+    children.set(child, (children.get(child) || 0) + 1);
+  }
+}
+const childEntries = [...children.entries()].sort((a, b) => b[1] - a[1]);
+
+const postsToShow = exactMatches.sort(
+  (a, b) => b.data.date.getTime() - a.data.date.getTime()
+);
+---
+
+<BaseLayout title={`分类: ${displayName}`}>
+  <p style="color: var(--color-muted); font-size: 0.9rem; margin-bottom: 0.5rem;">
+    分类路径：
+    {
+      segments.map((seg, i) => {
+        const linkPath = segments.slice(0, i + 1).join("/");
+        return (
+          <>
+            {i > 0 && " › "}
+            <a href={`/categories/${linkPath}`}>{seg}</a>
+          </>
+        );
+      })
+    }
+  </p>
+  <h1>{segments[segments.length - 1]}</h1>
+
+  <!-- 子分类 -->
+  {
+    childEntries.length > 0 && (
+      <div style="margin: 1rem 0 2rem;">
+        <p style="color: var(--color-muted); font-size: 0.9rem;">子分类：</p>
+        {childEntries.map(([name, count]) => (
+          <a class="tag"
+             href={`/categories/${path}/${name}`}
+             style="font-size: 0.95rem; padding: 0.35em 0.75em; margin: 0.2rem;">
+            📁 {name} ({count})
+          </a>
+        ))}
+      </div>
+    )
+  }
+
+  <!-- 文章列表 -->
+  <ul class="article-list">
+    {
+      postsToShow.map((post) => (
+        <li>
+          <span class="date">
+            {post.data.date.toLocaleDateString("zh-CN", {
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })}
+          </span>
+          <a class="title" href={`/blog/${post.id}`}>{post.data.title}</a>
+          {post.data.tags.length > 0 && (
+            <div>
+              {post.data.tags.map((tag) => (
+                <a class="tag" href={`/tags/${tag}`}>#{tag}</a>
+              ))}
+            </div>
+          )}
+        </li>
+      ))
+    }
+  </ul>
+
+  {
+    postsToShow.length === 0 && (
+      <p style="color: var(--color-muted);">此分类下暂无文章。</p>
+    )
+  }
+
+  <p style="margin-top: 2rem;">
+    <a href="/categories" style="font-size: 0.9rem;">← 查看全部分类</a>
+  </p>
+</BaseLayout>

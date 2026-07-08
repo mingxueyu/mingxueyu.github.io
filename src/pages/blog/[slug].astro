@@ -38,6 +38,20 @@ const { Content } = await render(post);
         }
       </div>
       <h1>{post.data.title}</h1>
+      {post.data.categories.length > 0 && (
+        <div style="font-size: 0.85rem; color: var(--color-muted); margin-bottom: 0.5rem;">
+          📁{" "}
+          {post.data.categories.map((cat, i) => {
+            const link = "/categories/" + post.data.categories.slice(0, i + 1).join("/");
+            return (
+              <>
+                {i > 0 && " › "}
+                <a href={link} style="color: var(--color-accent);">{cat}</a>
+              </>
+            );
+          })}
+        </div>
+      )}
       {post.data.tags.length > 0 && (
         <div class="tags">
           {post.data.tags.map((tag) => (

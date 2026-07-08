@@ -1,0 +1,92 @@
+---
+import { getCollection } from "astro:content";
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const posts = await getCollection("blog");
+
+// 构建分类树：{ "技术": { "前端": count, "后端": count }, "生活": count }
+interface Node {
+  count: number;
+  children: Map<string, Node>;
+}
+const root: Map<string, Node> = new Map();
+
+for (const post of posts) {
+  if (post.data.draft) continue;
+  const cats = post.data.categories;
+  if (cats.length === 0) continue;
+
+  let current = root;
+  for (const cat of cats) {
+    if (!current.has(cat)) {
+      current.set(cat, { count: 0, children: new Map() });
+    }
+    const node = current.get(cat)!;
+    node.count++;
+    current = node.children;
+  }
+}
+
+// 递归渲染 HTML
+function renderTree(
+  map: Map<string, Node>,
+  prefix: string = "",
+  depth: number = 0
+): string {
+  if (map.size === 0) return "";
+
+  const entries = [...map.entries()].sort((a, b) => b[1].count - a[1].count);
+
+  return entries
+    .map(([name, node]) => {
+      const path = prefix ? `${prefix}/${name}` : name;
+      const indent = "&nbsp;&nbsp;&nbsp;&nbsp;".repeat(depth);
+      const arrow = node.children.size > 0 ? " ▸" : "";
+      const children = renderTree(node.children, path, depth + 1);
+
+      return `
+        <div style="margin: 0.4rem 0;">
+          ${indent}
+          <a href="/categories/${path}" style="font-weight: 600;">
+            📁 ${name}${arrow}
+          </a>
+          <span style="color: var(--color-muted); font-size: 0.85rem;">
+            (${node.count})
+          </span>
+          ${children}
+        </div>`;
+    })
+    .join("");
+}
+
+const treeHtml = root.size > 0 ? renderTree(root) : "";
+
+// 未分类的文章
+const uncategorized = posts.filter(
+  (p) => !p.data.draft && p.data.categories.length === 0
+);
+---
+
+<BaseLayout title="分类">
+  <h1>分类</h1>
+  <div style="margin-top: 1rem;">
+    {treeHtml ? treeHtml : '<p style="color: var(--color-muted);">暂无分类</p>'}
+  </div>
+  {
+    uncategorized.length > 0 && (
+      <div style="margin-top: 2rem;">
+        <h3>未分类</h3>
+        <ul style="list-style: none;">
+          {uncategorized.map((p) => (
+            <li style="margin: 0.3rem 0;">
+              <a href={`/blog/${p.id}`}>{p.data.title}</a>
+              <span style="color: var(--color-muted); font-size: 0.85rem;">
+                {" "}({p.data.date.toLocaleDateString("zh-CN")})
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )
+  }
+</BaseLayout>

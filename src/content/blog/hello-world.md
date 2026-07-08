@@ -3,6 +3,7 @@ title: "Hello World — 我的第一篇文章"
 description: "欢迎来到我的博客，这是用 Astro 搭建的个人网站。"
 date: 2026-07-08
 tags: ["astro", "博客"]
+categories: ["技术", "前端"]
 ---
 
 ## 欢迎 👋

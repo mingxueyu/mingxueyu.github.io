@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+    "build": "astro build && npx pagefind --site dist",
     "preview": "astro preview",
     "astro": "astro",
     "new": "bash scripts/new-post.sh",
@@ -16,6 +16,7 @@
   "dependencies": {
     "@astrojs/rss": "^4.0.19",
     "@supabase/supabase-js": "^2.110.1",
-    "astro": "^7.0.0"
+    "astro": "^7.0.0",
+    "pagefind": "^1.5.2"
   }
 }

@@ -1,0 +1,74 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="搜索">
+  <h1>搜索</h1>
+
+  <!-- Pagefind 搜索框 -->
+  <div id="search-box" style="margin: 1.5rem 0;"></div>
+
+  <!-- 搜索结果 -->
+  <div id="search-results" style="margin-top: 1rem;"></div>
+
+  <style>
+    /* ===== Pagefind 样式覆盖 ===== */
+    .pagefind-ui {
+      --pagefind-ui-scale: 1;
+      --pagefind-ui-primary: var(--color-text);
+      --pagefind-ui-text: var(--color-text);
+      --pagefind-ui-background: var(--color-bg);
+      --pagefind-ui-border: var(--color-border);
+      --pagefind-ui-tag: var(--color-border);
+      --pagefind-ui-border-width: 1px;
+      --pagefind-ui-border-radius: 8px;
+      --pagefind-ui-image-border-radius: 8px;
+      --pagefind-ui-image-box-ratio: 3/2;
+      --pagefind-ui-font: var(--font-sans);
+      --pagefind-ui-search-input-padding: 0.75rem 1rem;
+    }
+
+    .pagefind-ui__search-input {
+      font-size: 1.1rem !important;
+    }
+  </style>
+
+  <link href="/pagefind/pagefind-ui.css" rel="stylesheet" is:inline />
+  <script src="/pagefind/pagefind-ui.js" is:inline></script>
+  <script>
+    // 等待 Pagefind 加载完成后初始化
+    function initSearch() {
+      try {
+        new window.PagefindUI({
+          element: "#search-box",
+          showSubResults: true,
+          showImages: false,
+          excerptLength: 30,
+          autofocus: true,
+        });
+        // 把加载提示换成空
+        const msg = document.getElementById("search-loading");
+        if (msg) msg.remove();
+      } catch (e) {
+        // Pagefind 还没加载完，等一会重试
+        document.getElementById("search-loading")!.textContent =
+          "搜索组件加载中…";
+        setTimeout(initSearch, 200);
+      }
+    }
+
+    // Pagefind 脚本加载完成后自动初始化
+    const script = document.querySelector('script[src*="pagefind-ui"]');
+    if (script) {
+      script.addEventListener("load", initSearch);
+    }
+    // 兜底：脚本已缓存直接可用
+    setTimeout(() => {
+      if (window.PagefindUI && !document.querySelector(".pagefind-ui__search-input")) {
+        initSearch();
+      }
+    }, 500);
+  </script>
+
+  <p id="search-loading" style="color: var(--color-muted);"></p>
+</BaseLayout>

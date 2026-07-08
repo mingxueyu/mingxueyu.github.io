@@ -4,34 +4,13 @@
 用法：把 .md 文件放到 posts/ 文件夹，然后运行：
   python publish.py "提交说明"
 """
-import os, sys, re, subprocess
+import os, sys, shutil, re, subprocess
 from datetime import date
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 POSTS_DIR = os.path.join(ROOT, "posts")
 CONTENT_DIR = os.path.join(ROOT, "src", "content", "blog")
 TODAY = date.today().isoformat()
-
-
-def is_text_file(filepath):
-    """检查是否为纯文本文件（非二进制）"""
-    try:
-        with open(filepath, "r", encoding="utf-8") as f:
-            f.read(512)  # 读前 512 字节检查编码
-        return True
-    except UnicodeDecodeError:
-        return False
-
-
-def is_valid_md(filepath):
-    """检查是否为有效的 .md 文章文件"""
-    if not filepath.lower().endswith(".md"):
-        return False, "不是 .md 文件"
-    if not is_text_file(filepath):
-        return False, "文件不是纯文本（可能是二进制或编码错误）"
-    if os.path.getsize(filepath) == 0:
-        return False, "文件为空"
-    return True, ""
 
 
 def extract_frontmatter(text):
@@ -74,39 +53,19 @@ def publish(msg="更新文章"):
         print("📁 已创建 posts/ 文件夹，把 .md 文件放进去后重新运行。")
         return
 
-    # 仅扫描 .md 文件，跳过 README.txt 等非 .md 文件
-    all_files = os.listdir(POSTS_DIR)
-    md_files = [f for f in all_files if f.lower().endswith(".md")]
-    skipped = [f for f in all_files if not f.lower().endswith(".md")]
-
-    if skipped:
-        print(f"⏭️  跳过的非 .md 文件: {', '.join(skipped)}")
-
+    md_files = [f for f in os.listdir(POSTS_DIR) if f.endswith(".md")]
     if not md_files:
         print("⚠️  posts/ 文件夹里没有 .md 文件，请先放入文章。")
         return
 
-    processed = 0
-    errors = 0
-
     for filename in md_files:
         src = os.path.join(POSTS_DIR, filename)
-
-        valid, reason = is_valid_md(src)
-        if not valid:
-            print(f"⏭️  跳过 {filename}: {reason}")
-            skipped.append(filename)
-            continue
-
         with open(src, "r", encoding="utf-8") as f:
             text = f.read()
 
-        # 检查正文是否为空（只有 frontmatter 不算数）
         fm, body = extract_frontmatter(text)
-        if fm is not None and not body.strip():
-            print(f"⏭️  跳过 {filename}: frontmatter 之后没有正文")
-            continue
 
+        # 自动补全 frontmatter
         if fm is None:
             title = os.path.splitext(filename)[0]
             fm = {"title": title}
@@ -122,11 +81,6 @@ def publish(msg="更新文章"):
         dest_name = f"{slug}.md"
         dest = os.path.join(CONTENT_DIR, dest_name)
 
-        # 检查是否会覆盖已有文章
-        if os.path.exists(dest):
-            print(f"⚠️  {dest_name} 已存在，跳过（先手动删除旧文件再试）")
-            continue
-
         frontmatter_block = f"""---
 title: "{title}"
 description: "{description}"
@@ -140,44 +94,27 @@ draft: {draft}
 
         os.remove(src)
         print(f"✅ {filename} → src/content/blog/{dest_name}")
-        processed += 1
 
-    if processed == 0:
-        print("⚠️  没有处理任何文件，已中止。")
-        return
-
-    # 构建 —— 只构建新文件，不做全量变更
+    # 构建
     print("\n📦 构建中…")
-    result = subprocess.run(
-        ["npx", "astro", "build"], cwd=ROOT, capture_output=True, text=True
-    )
+    result = subprocess.run(["npx", "astro", "build"], cwd=ROOT, capture_output=True, text=True)
     if result.returncode != 0:
         print("❌ 构建失败")
         print(result.stderr)
         return
 
-    # Git —— 只 stage 文章相关目录
+    # Git
     print("📝 提交…")
-    subprocess.run(
-        ["git", "add", "src/content/blog/", "posts/"], cwd=ROOT, check=True
-    )
-    commit = subprocess.run(
-        ["git", "commit", "-m", msg], cwd=ROOT, capture_output=True, text=True
-    )
-    if "nothing to commit" in (commit.stdout + commit.stderr):
-        print("⚠️  没有新更改，跳过推送。")
-        return
+    subprocess.run(["git", "add", "."], cwd=ROOT)
+    subprocess.run(["git", "commit", "-m", msg], cwd=ROOT)
 
     # 推送
     print("🚀 推送…")
-    push = subprocess.run(
-        ["git", "push"], cwd=ROOT, capture_output=True, text=True
-    )
+    push = subprocess.run(["git", "push"], cwd=ROOT, capture_output=True, text=True)
     if push.returncode == 0:
         print("✅ 已发布！1-2 分钟后刷新 treefish.top")
     else:
         print(f"❌ 推送失败: {push.stderr}")
-        print("   可以手动 git push 重试")
 
 
 if __name__ == "__main__":

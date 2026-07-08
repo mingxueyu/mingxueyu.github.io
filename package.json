@@ -9,7 +9,9 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "new": "bash scripts/new-post.sh",
+    "publish": "bash scripts/publish.sh"
   },
   "dependencies": {
     "@astrojs/rss": "^4.0.19",

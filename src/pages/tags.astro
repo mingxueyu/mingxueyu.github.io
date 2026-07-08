@@ -1,0 +1,33 @@
+---
+import { getCollection } from "astro:content";
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const posts = await getCollection("blog");
+
+const tagMap = new Map<string, number>();
+for (const post of posts) {
+  if (post.data.draft) continue;
+  for (const tag of post.data.tags) {
+    tagMap.set(tag, (tagMap.get(tag) || 0) + 1);
+  }
+}
+
+const tags = [...tagMap.entries()].sort((a, b) => b[1] - a[1]);
+---
+
+<BaseLayout title="标签">
+  <h1>标签</h1>
+  <div style="margin-top: 1rem;">
+    {
+      tags.length === 0
+        ? <p style="color: var(--color-muted);">暂无标签</p>
+        : tags.map(([tag, count]) => (
+            <a class="tag"
+               href={`/tags/${tag}`}
+               style="font-size: 1rem; padding: 0.3em 0.7em; margin: 0.2rem;">
+              #{tag} ({count})
+            </a>
+          ))
+    }
+  </div>
+</BaseLayout>

@@ -1,0 +1,92 @@
+---
+// AuthWidget.astro — 登录/注册组件（客户端渲染）
+---
+
+<div id="auth-widget" class="auth-widget">
+  <p>加载中…</p>
+</div>
+
+<script>
+  import { createClient } from "@supabase/supabase-js";
+
+  const supabase = createClient(
+    import.meta.env.PUBLIC_SUPABASE_URL,
+    import.meta.env.PUBLIC_SUPABASE_ANON_KEY
+  );
+
+  const container = document.getElementById("auth-widget")!;
+
+  async function render() {
+    const { data } = await supabase.auth.getUser();
+
+    if (data.user?.email) {
+      container.innerHTML = `
+        <h3>✅ 已登录</h3>
+        <p style="margin-bottom: 0.75rem;">${data.user.email}</p>
+        <button id="btn-signout"
+                style="padding: 0.5rem 1.5rem; background: var(--color-border); color: var(--color-text); border: none; border-radius: 6px; cursor: pointer; font-size: 0.95rem;">
+          退出登录
+        </button>
+      `;
+      document.getElementById("btn-signout")!.addEventListener("click", async () => {
+        await supabase.auth.signOut();
+        location.reload();
+      });
+    } else {
+      container.innerHTML = `
+        <h3>登录 / 注册</h3>
+        <form id="auth-form" style="display: flex; flex-direction: column; gap: 0.5rem; max-width: 320px; margin: 0 auto;">
+          <input type="email" id="auth-email" placeholder="邮箱地址" required
+                 style="padding: 0.5rem; border: 1px solid var(--color-border); border-radius: 6px; font-size: 1rem;" />
+          <input type="password" id="auth-password" placeholder="密码（至少 6 位）" required minlength="6"
+                 style="padding: 0.5rem; border: 1px solid var(--color-border); border-radius: 6px; font-size: 1rem;" />
+          <div style="display: flex; gap: 0.5rem;">
+            <button type="submit" id="btn-signin"
+                    style="flex: 1; padding: 0.5rem; background: var(--color-accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.95rem;">
+              登录
+            </button>
+            <button type="button" id="btn-signup"
+                    style="flex: 1; padding: 0.5rem; background: var(--color-border); color: var(--color-text); border: none; border-radius: 6px; cursor: pointer; font-size: 0.95rem;">
+              注册
+            </button>
+          </div>
+          <p id="auth-msg" style="margin-top: 0.75rem; font-size: 0.9rem;"></p>
+        </form>
+      `;
+
+      const form = document.getElementById("auth-form")!;
+      const msg = document.getElementById("auth-msg")!;
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const email = (document.getElementById("auth-email") as HTMLInputElement).value;
+        const password = (document.getElementById("auth-password") as HTMLInputElement).value;
+        msg.textContent = "登录中…";
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+          msg.innerHTML = `<span style="color: red;">${error.message}</span>`;
+        } else {
+          render();
+        }
+      });
+
+      document.getElementById("btn-signup")!.addEventListener("click", async () => {
+        const email = (document.getElementById("auth-email") as HTMLInputElement).value;
+        const password = (document.getElementById("auth-password") as HTMLInputElement).value;
+        if (password.length < 6) {
+          msg.innerHTML = '<span style="color: red;">密码至少 6 位</span>';
+          return;
+        }
+        msg.textContent = "注册中…";
+        const { error } = await supabase.auth.signUp({ email, password });
+        if (error) {
+          msg.innerHTML = `<span style="color: red;">${error.message}</span>`;
+        } else {
+          msg.innerHTML = '<span style="color: green;">注册成功！请检查邮箱确认。</span>';
+        }
+      });
+    }
+  }
+
+  render();
+</script>

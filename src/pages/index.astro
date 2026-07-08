@@ -1,0 +1,42 @@
+---
+import { getCollection } from "astro:content";
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const posts = (await getCollection("blog"))
+  .filter((p) => !p.data.draft)
+  .sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+---
+
+<BaseLayout title="首页">
+  <ul class="article-list">
+    {
+      posts.map((post) => (
+        <li>
+          <span class="date">
+            {post.data.date.toLocaleDateString("zh-CN", {
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })}
+          </span>
+          <a class="title" href={`/blog/${post.id}`}>{post.data.title}</a>
+          {post.data.description && (
+            <p class="excerpt">{post.data.description}</p>
+          )}
+          {post.data.tags.length > 0 && (
+            <div>
+              {post.data.tags.map((tag) => (
+                <a class="tag" href={`/tags/${tag}`}>#{tag}</a>
+              ))}
+            </div>
+          )}
+        </li>
+      ))
+    }
+  </ul>
+  {posts.length === 0 && (
+    <p style="color: var(--color-muted); text-align: center; margin-top: 3rem;">
+      还没有文章 ✍️
+    </p>
+  )}
+</BaseLayout>

@@ -1,0 +1,177 @@
+---
+import { getCollection } from "astro:content";
+
+// 构建分类树
+interface Node {
+  count: number;
+  children: Map<string, Node>;
+}
+const root: Map<string, Node> = new Map();
+const posts = await getCollection("blog");
+
+for (const post of posts) {
+  if (post.data.draft) continue;
+  const cats = post.data.categories;
+  if (cats.length === 0) continue;
+  let cur = root;
+  for (const cat of cats) {
+    if (!cur.has(cat)) cur.set(cat, { count: 0, children: new Map() });
+    cur.get(cat)!.count++;
+    cur = cur.get(cat)!.children;
+  }
+}
+
+function renderNode(
+  map: Map<string, Node>,
+  prefix = "",
+  depth = 0
+): string {
+  const entries = [...map.entries()].sort(
+    (a, b) => b[1].count - a[1].count
+  );
+  return entries
+    .map(([name, node]) => {
+      const path = prefix ? `${prefix}/${name}` : name;
+      const hasKids = node.children.size > 0;
+      const id = "cat-" + path.replace(/\//g, "-");
+      return `
+        <li>
+          <div class="tree-row" style="padding-left:${depth * 1}rem">
+            ${hasKids
+              ? `<span class="tree-toggle" data-target="${id}" aria-expanded="true">▾</span>`
+              : `<span class="tree-spacer"></span>`
+            }
+            <a href="/categories/${path}" class="tree-link">${name}</a>
+            <span class="tree-count">${node.count}</span>
+          </div>
+          ${hasKids
+            ? `<ul id="${id}" class="tree-children">${renderNode(node.children, path, depth + 1)}</ul>`
+            : ""}
+        </li>`;
+    })
+    .join("");
+}
+---
+
+<aside id="sidebar">
+  <div id="sidebar-inner">
+    <div class="sidebar-head">
+      <a href="/categories" class="sidebar-title">分类</a>
+    </div>
+    <nav>
+      <ul class="tree-root">
+        {root.size > 0 ? renderNode(root) : '<li class="tree-empty">暂无分类</li>'}
+      </ul>
+    </nav>
+  </div>
+</aside>
+
+<style>
+  #sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 220px;
+    height: 100vh;
+    border-right: 1px solid var(--border);
+    background: var(--bg);
+    overflow-y: auto;
+    z-index: 10;
+    padding: 1.5rem 1rem;
+    font-size: 0.88rem;
+  }
+  .sidebar-head {
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+  .tree-root,
+  .tree-children {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .tree-children {
+    overflow: hidden;
+    transition: max-height 0.2s ease;
+    max-height: 600px;
+  }
+  .tree-children.collapsed {
+    max-height: 0;
+  }
+  .tree-row {
+    display: flex;
+    align-items: center;
+    padding: 0.25rem 0;
+    gap: 0.3rem;
+    border-radius: 3px;
+    transition: background 0.1s;
+  }
+  .tree-row:hover {
+    background: var(--hover);
+  }
+  .tree-toggle {
+    cursor: pointer;
+    font-size: 0.7rem;
+    width: 1rem;
+    text-align: center;
+    flex-shrink: 0;
+    user-select: none;
+    color: var(--muted);
+    transition: transform 0.15s;
+  }
+  .tree-toggle.collapsed {
+    transform: rotate(-90deg);
+  }
+  .tree-spacer {
+    width: 1rem;
+    flex-shrink: 0;
+  }
+  .tree-link {
+    flex: 1;
+    color: var(--text);
+    font-size: 0.88rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tree-link:hover {
+    opacity: 0.6;
+  }
+  .tree-count {
+    font-size: 0.75rem;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+  .tree-empty {
+    color: var(--muted);
+    padding: 0.25rem 0;
+  }
+
+  /* 移动端：隐藏侧栏 */
+  @media (max-width: 860px) {
+    #sidebar {
+      display: none;
+    }
+  }
+</style>
+
+<script>
+  // 折叠/展开
+  document.querySelectorAll(".tree-toggle").forEach((el) => {
+    el.addEventListener("click", () => {
+      const targetId = (el as HTMLElement).dataset.target!;
+      const ul = document.getElementById(targetId)!;
+      ul.classList.toggle("collapsed");
+      el.classList.toggle("collapsed");
+      el.setAttribute(
+        "aria-expanded",
+        el.getAttribute("aria-expanded") === "true" ? "false" : "true"
+      );
+    });
+  });
+</script>

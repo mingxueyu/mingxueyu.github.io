@@ -32,9 +32,20 @@ html {
 }
 
 body {
+  /* 侧栏 220px，内容 680px，居中剩余空间 */
+  --sidebar: 220px;
   max-width: var(--width);
-  margin: 0 auto;
+  margin-left: calc(var(--sidebar) + (100% - var(--sidebar) - var(--width)) / 2);
+  margin-right: calc((100% - var(--sidebar) - var(--width)) / 2);
   padding: 3rem 1.5rem 5rem;
+}
+
+@media (max-width: 860px) {
+  body {
+    --sidebar: 0px;
+    margin: 0 auto;
+    padding: 2rem 1rem 3rem;
+  }
 }
 
 /* ---- Typography ---- */

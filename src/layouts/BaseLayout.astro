@@ -1,5 +1,6 @@
 ---
 import "../styles/global.css";
+import Sidebar from "../components/Sidebar.astro";
 
 export interface Props {
   title: string;
@@ -17,6 +18,8 @@ export interface Props {
     <link rel="alternate" type="application/rss+xml" title="RSS" href="/rss.xml" />
   </head>
   <body>
+    <Sidebar />
+    <div id="page-wrap">
     <header class="site-header">
       <a class="logo" href="/">treefish</a>
       <nav>
@@ -35,5 +38,6 @@ export interface Props {
     <footer class="site-footer">
       &copy; {new Date().getFullYear()} treefish.top
     </footer>
+    </div>
   </body>
 </html>

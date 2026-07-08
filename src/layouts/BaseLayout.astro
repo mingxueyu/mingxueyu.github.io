@@ -1,4 +1,3 @@
-
 ---
 import "../styles/global.css";
 
@@ -13,18 +12,18 @@ export interface Props {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>{Astro.props.title} — 我的博客</title>
+    <title>{Astro.props.title} — treefish</title>
     <meta name="description" content={Astro.props.description || "个人博客"} />
     <link rel="alternate" type="application/rss+xml" title="RSS" href="/rss.xml" />
   </head>
   <body>
     <header class="site-header">
-      <a class="logo" href="/">🏠 我的博客</a>
+      <a class="logo" href="/">treefish</a>
       <nav>
         <a href="/">文章</a>
         <a href="/categories">分类</a>
         <a href="/tags">标签</a>
-        <a href="/search">🔍</a>
+        <a href="/search">搜索</a>
         <a href="/about">关于</a>
       </nav>
     </header>
@@ -34,7 +33,7 @@ export interface Props {
     </main>
 
     <footer class="site-footer">
-      <p>🚀 Astro 7 博客 · treefish.top · 已更新 2026-07-09</p>
+      &copy; {new Date().getFullYear()} treefish.top
     </footer>
   </body>
 </html>

@@ -8,35 +8,35 @@ const posts = (await getCollection("blog"))
 ---
 
 <BaseLayout title="首页">
-  <ul class="article-list">
-    {
-      posts.map((post) => (
+  {posts.length === 0 ? (
+    <p style="color: var(--muted); text-align: center; margin-top: 4rem;">
+      还没有文章
+    </p>
+  ) : (
+    <ul class="post-list">
+      {posts.map((post) => (
         <li>
-          <span class="date">
-            {post.data.date.toLocaleDateString("zh-CN", {
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </span>
-          <a class="title" href={`/blog/${post.id}`}>{post.data.title}</a>
-          {post.data.description && (
-            <p class="excerpt">{post.data.description}</p>
-          )}
+          <div class="post-row">
+            <span class="post-date">
+              {post.data.date.toLocaleDateString("zh-CN", {
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+              })}
+            </span>
+            <a class="post-title" href={`/blog/${post.id}`}>
+              {post.data.title}
+            </a>
+          </div>
           {post.data.tags.length > 0 && (
-            <div>
+            <div style="margin-top: 0.35rem; margin-left: 5.75rem;">
               {post.data.tags.map((tag) => (
                 <a class="tag" href={`/tags/${tag}`}>#{tag}</a>
               ))}
             </div>
           )}
         </li>
-      ))
-    }
-  </ul>
-  {posts.length === 0 && (
-    <p style="color: var(--color-muted); text-align: center; margin-top: 3rem;">
-      还没有文章 ✍️
-    </p>
+      ))}
+    </ul>
   )}
 </BaseLayout>

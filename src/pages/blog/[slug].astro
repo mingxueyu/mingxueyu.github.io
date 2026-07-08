@@ -1,6 +1,7 @@
 ---
 import { getCollection, render } from "astro:content";
 import BaseLayout from "../../layouts/BaseLayout.astro";
+import CommentWidget from "../../components/CommentWidget.astro";
 
 export async function getStaticPaths() {
   const posts = await getCollection("blog");
@@ -47,4 +48,6 @@ const { Content } = await render(post);
     </header>
     <Content />
   </article>
+
+  <CommentWidget postSlug={post.id} />
 </BaseLayout>

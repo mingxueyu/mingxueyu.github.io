@@ -256,22 +256,30 @@ function renderNode(
 </style>
 
 <script>
-  // 折叠/展开 — 使用 DOM 遍历而不是 getElementById，更可靠
-  document.querySelectorAll(".tree-toggle").forEach((toggle) => {
-    toggle.addEventListener("click", () => {
-      // 找到 toggle 所在的 <li>，然后找其下的直接子 ul.tree-children
-      const li = toggle.closest("li");
-      if (!li) return;
-      const childUl = li.querySelector(":scope > .tree-children") as HTMLElement | null;
-      if (!childUl) return;
+  // 折叠/展开 — 事件委托，在 sidebar 上监听所有点击
+  document.getElementById("sidebar")?.addEventListener("click", (e) => {
+    const toggle = e.target.closest(".tree-toggle");
+    if (!toggle) return;
 
-      childUl.classList.toggle("collapsed");
-      toggle.classList.toggle("collapsed");
-      toggle.setAttribute(
-        "aria-expanded",
-        toggle.getAttribute("aria-expanded") === "true" ? "false" : "true"
-      );
-    });
+    // 向上找到所在 <li>
+    const li = toggle.closest("li");
+    if (!li) return;
+
+    // 在 <li> 的直接子元素中找 ul.tree-children
+    let childUl = null;
+    for (let i = 0; i < li.children.length; i++) {
+      const c = li.children[i];
+      if (c.tagName === "UL" && c.classList.contains("tree-children")) {
+        childUl = c;
+        break;
+      }
+    }
+    if (!childUl) return;
+
+    childUl.classList.toggle("collapsed");
+    toggle.classList.toggle("collapsed");
+    const expanded = toggle.getAttribute("aria-expanded") === "true";
+    toggle.setAttribute("aria-expanded", String(!expanded));
   });
 
   // 高亮当前分类路径
@@ -279,8 +287,8 @@ function renderNode(
     const currentPath = window.location.pathname;
     if (!currentPath.startsWith("/categories/")) return;
 
-    const links = document.querySelectorAll<HTMLAnchorElement>(".tree-link");
-    let bestMatch: HTMLAnchorElement | null = null;
+    const links = document.querySelectorAll(".tree-link");
+    let bestMatch = null;
     let bestLen = 0;
 
     links.forEach((a) => {
@@ -298,19 +306,18 @@ function renderNode(
       bestMatch.closest(".tree-row")?.classList.add("active");
 
       // 展开所有父级 .tree-children
-      let childUl = bestMatch.closest(".tree-children") as HTMLElement | null;
+      let childUl = bestMatch.closest(".tree-children");
       while (childUl) {
         childUl.classList.remove("collapsed");
-        // 找到父 li 中的 .tree-toggle 并展开
         const parentLi = childUl.closest("li");
         if (parentLi) {
-          const toggle = parentLi.querySelector(":scope > .tree-row .tree-toggle") as HTMLElement | null;
+          const toggle = parentLi.querySelector(":scope > .tree-row .tree-toggle");
           if (toggle) {
             toggle.classList.remove("collapsed");
             toggle.setAttribute("aria-expanded", "true");
           }
         }
-        childUl = parentLi?.parentElement?.closest(".tree-children") as HTMLElement | null;
+        childUl = parentLi?.parentElement?.closest(".tree-children");
       }
     }
   })();

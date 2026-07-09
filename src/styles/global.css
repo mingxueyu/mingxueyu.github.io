@@ -110,35 +110,13 @@ blockquote {
   color: var(--muted);
 }
 
-/* ---- Gallery translucent modules ---- */
-html.has-gallery .site-header,
-html.has-gallery main,
-html.has-gallery .site-footer {
-  background: rgba(255,255,255,0.45);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border-radius: 10px;
-}
-html.has-gallery .site-header {
-  padding: 0.85rem 1.25rem;
-  margin-bottom: 1rem;
-}
-html.has-gallery main {
-  padding: 1.75rem 1.5rem;
-}
-html.has-gallery .site-footer {
-  padding: 0.85rem 1.25rem;
-  margin-top: 1rem;
-  border-top: none;
-}
-
 /* ---- Header ---- */
 .site-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 3rem;
-  padding-bottom: 0;
+  margin-bottom: 1rem;
+  padding: 0.85rem 1.25rem;
   border-bottom: none;
 }
 .site-header .logo {
@@ -234,9 +212,8 @@ article header .tags {
 
 /* ---- Footer ---- */
 .site-footer {
-  margin-top: 5rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid var(--border);
+  margin-top: 1rem;
+  padding: 0.85rem 1.25rem;
   color: var(--muted);
   font-size: 0.8rem;
 }

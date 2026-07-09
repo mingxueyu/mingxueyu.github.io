@@ -10,36 +10,48 @@ export interface Props {
   description?: string;
 }
 
-// 扫描 public/gallery/ 中的图片
 const galleryDir = join(process.cwd(), "public", "gallery");
 let galleryImages: string[] = [];
-let galleryScript = "";
-let galleryStyle = "";
 try {
   galleryImages = readdirSync(galleryDir)
     .filter((f) => /\.(jpg|jpeg|png|webp|avif|gif)$/i.test(f))
-    .map((f) => `/gallery/${f}`);
+    .map((f) => `/gallery/${encodeURIComponent(f)}`);
+} catch {}
 
-  if (galleryImages.length > 0) {
-    const json = JSON.stringify(galleryImages);
-    galleryScript = `(function(){const imgs=${json};const u='url('+imgs[Math.floor(Math.random()*imgs.length)]+')';document.documentElement.style.backgroundImage=u;document.documentElement.classList.add('has-gallery');})();`;
-    galleryStyle = `html.has-gallery{background-size:cover;background-position:center;background-attachment:fixed;background-repeat:no-repeat}body{background:transparent}`;
-  }
-} catch {
-  // 目录不存在或为空
-}
+const hasGallery = galleryImages.length > 0;
+const defaultBg = hasGallery
+  ? galleryImages[Math.floor(Math.random() * galleryImages.length)]
+  : "";
+const galleryJson = JSON.stringify(galleryImages);
 ---
 
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html
+  lang="zh-CN"
+  style={hasGallery ? `background-image:url(${defaultBg});background-size:cover;background-position:center;background-attachment:fixed;background-repeat:no-repeat;` : ""}
+>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{Astro.props.title} — treefish</title>
     <meta name="description" content={Astro.props.description || "个人博客"} />
     <link rel="alternate" type="application/rss+xml" title="RSS" href="/rss.xml" />
+    <style is:inline>
+      /* 关键样式内联，100% 可靠 */
+      html { background-color: transparent !important; }
+      body { background: transparent !important; }
+      .site-header, main, .site-footer {
+        background: rgba(255,255,255,0.45) !important;
+        backdrop-filter: blur(8px) !important;
+        -webkit-backdrop-filter: blur(8px) !important;
+        border-radius: 10px !important;
+      }
+      main { padding: 1.75rem 1.5rem; }
+      .site-header { padding: 0.85rem 1.25rem; margin-bottom: 1rem; }
+      .site-footer { padding: 0.85rem 1.25rem; margin-top: 1rem; border-top: none !important; }
+    </style>
   </head>
-  <body>
+  <body data-gallery={galleryJson}>
     <Sidebar />
     <AudioPlayer />
     <div id="page-wrap">
@@ -64,8 +76,14 @@ try {
     </footer>
     </div>
 
-    {galleryScript && (
-      <div set:html={`<script>${galleryScript}</script><style>${galleryStyle}</style>`} style="display:none" />
-    )}
+    <script is:inline>
+      (function(){
+        var raw = document.body.getAttribute('data-gallery');
+        if (!raw || raw === '[]') return;
+        var imgs = JSON.parse(raw);
+        var pick = imgs[Math.floor(Math.random() * imgs.length)];
+        document.documentElement.style.backgroundImage = 'url(' + pick + ')';
+      })();
+    </script>
   </body>
 </html>

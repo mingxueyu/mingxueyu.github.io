@@ -11,7 +11,7 @@ const { name, path, count, children } = Astro.props as CatNode;
 const hasKids = children.length > 0;
 ---
 
-<li>
+<li class={!hasKids ? 'tree-leaf' : ''}>
   <div class="tree-row">
     {hasKids ? (
       <span class="tree-toggle" aria-expanded="true" title="展开/折叠">▾</span>
@@ -46,15 +46,23 @@ const hasKids = children.length > 0;
 
   /* Tree Lines */
   .tree-children > li { position: relative; }
-  .tree-children > li::before {
+
+  /* 水平分支线：放在 .tree-row 上，top:50% 精确对齐行中心 */
+  .tree-children > li > .tree-row {
+    position: relative;
+  }
+  .tree-children > li > .tree-row::before {
     content: "";
     position: absolute;
     left: 0;
-    top: 0.7rem;
-    width: 0.6rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0.55rem;
     height: 0;
     border-top: 1.5px solid var(--border);
   }
+
+  /* 垂直连接线 */
   .tree-children > li::after {
     content: "";
     position: absolute;
@@ -63,8 +71,12 @@ const hasKids = children.length > 0;
     bottom: 0;
     border-left: 1.5px solid var(--border);
   }
-  .tree-children > li:last-child::after {
-    height: 0.7rem;
+
+  /* 末位子节点 & 叶子节点：垂直线止于行中心（与水平分支交汇） */
+  .tree-children > li:last-child::after,
+  .tree-children > li.tree-leaf::after {
+    bottom: auto;
+    height: 50%;
   }
 
   /* Row */

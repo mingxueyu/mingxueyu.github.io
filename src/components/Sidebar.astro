@@ -1,5 +1,6 @@
 ---
 import { getCollection } from "astro:content";
+import TreeItem from "./TreeItem.astro";
 
 // 构建分类树
 interface Node {
@@ -21,34 +22,19 @@ for (const post of posts) {
   }
 }
 
-function renderNode(
-  map: Map<string, Node>,
-  prefix = ""
-): string {
-  const entries = [...map.entries()].sort(
-    (a, b) => b[1].count - a[1].count
-  );
-  return entries
-    .map(([name, node]) => {
-      const path = prefix ? `${prefix}/${name}` : name;
-      const hasKids = node.children.size > 0;
-      const spacer = '<span class="tree-icon"></span>';
-      return `<li>
-          <div class="tree-row">
-            ${hasKids
-              ? `<span class="tree-toggle" aria-expanded="true" title="展开/折叠">▾</span>`
-              : spacer
-            }
-            <a href="/categories/${path}" class="tree-link">${name}</a>
-            <span class="tree-count">${node.count}</span>
-          </div>
-          ${hasKids
-            ? `<ul class="tree-children">${renderNode(node.children, path)}</ul>`
-            : ""}
-        </li>`;
-    })
-    .join("");
+// 将嵌套 Map 转为 TreeItem 可用的数组结构
+function toArray(map: Map<string, Node>, prefix = ""): any[] {
+  return [...map.entries()]
+    .sort((a, b) => b[1].count - a[1].count)
+    .map(([name, node]) => ({
+      name,
+      path: prefix ? `${prefix}/${name}` : name,
+      count: node.count,
+      children: toArray(node.children, prefix ? `${prefix}/${name}` : name),
+    }));
 }
+
+const categories = toArray(root);
 ---
 
 <aside id="sidebar">
@@ -57,10 +43,13 @@ function renderNode(
       <a href="/categories" class="sidebar-title">📂 分类</a>
     </div>
     <nav>
-      {root.size > 0
-        ? <ul class="tree-root" set:html={renderNode(root)} />
-        : <ul class="tree-root"><li class="tree-empty">暂无分类</li></ul>
-      }
+      {categories.length > 0 ? (
+        <ul class="tree-root">
+          {categories.map((cat) => <TreeItem {...cat} />)}
+        </ul>
+      ) : (
+        <p class="tree-empty">暂无分类</p>
+      )}
     </nav>
   </div>
 </aside>
@@ -77,7 +66,7 @@ function renderNode(
     overflow-y: auto;
     overflow-x: hidden;
     z-index: 10;
-    padding: 1.5rem 1rem 1.5rem 1rem;
+    padding: 1.5rem 1rem;
     font-size: 0.88rem;
   }
 
@@ -96,7 +85,6 @@ function renderNode(
 
   .sidebar-title:hover { opacity: 0.6; }
 
-  /* ============ Tree Root ============ */
   .tree-root {
     list-style: none;
     padding: 0;
@@ -107,218 +95,14 @@ function renderNode(
     position: relative;
   }
 
-  /* ============ Children List ============ */
-  .tree-children {
-    list-style: none;
-    padding: 0 0 0 1.2rem;
-    margin: 0;
-    overflow: hidden;
-    transition: max-height 0.25s ease, opacity 0.25s ease;
-    max-height: 800px;
-  }
-
-  .tree-children.collapsed {
-    max-height: 0;
-    opacity: 0;
-  }
-
-  /* ============ Tree Lines (within children only) ============ */
-  .tree-children > li {
-    position: relative;
-  }
-
-  /* Horizontal branch: ─── */
-  .tree-children > li::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 0.7rem;
-    width: 0.6rem;
-    height: 0;
-    border-top: 1.5px solid var(--border);
-  }
-
-  /* Vertical line going down │ */
-  .tree-children > li::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    border-left: 1.5px solid var(--border);
-  }
-
-  /* Last child: cut vertical line so it doesn't extend past its row */
-  .tree-children > li:last-child::after {
-    height: 0.7rem;
-  }
-
-  /* ============ Tree Row ============ */
-  .tree-row {
-    display: flex;
-    align-items: center;
-    padding: 0.28rem 0.4rem;
-    gap: 0.35rem;
-    border-radius: 4px;
-    transition: background 0.12s;
-  }
-
-  .tree-row:hover {
-    background: var(--hover);
-  }
-
-  /* Highlight current category when on its page */
-  .tree-row.active {
-    background: #f0f0f0;
-    font-weight: 600;
-  }
-
-  .tree-row.active .tree-link {
-    font-weight: 600;
-  }
-
-  /* ============ Toggle Arrow ============ */
-  .tree-toggle {
-    cursor: pointer;
-    font-size: 0.65rem;
-    width: 1.1rem;
-    height: 1.1rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    user-select: none;
-    color: var(--muted);
-    border-radius: 3px;
-    transition: transform 0.2s ease, background 0.12s;
-    line-height: 1;
-  }
-
-  .tree-toggle:hover {
-    background: var(--border);
-    color: var(--text);
-  }
-
-  .tree-toggle.collapsed {
-    transform: rotate(-90deg);
-  }
-
-  /* ============ Icon placeholder (leaf nodes) ============ */
-  .tree-icon {
-    width: 1.1rem;
-    flex-shrink: 0;
-    text-align: center;
-    font-size: 0.55rem;
-    color: var(--border);
-    line-height: 1;
-  }
-
-  /* Small dot for leaf nodes */
-  .tree-children .tree-icon::after {
-    content: "•";
-  }
-
-  /* ============ Link & Count ============ */
-  .tree-link {
-    flex: 1;
-    color: var(--text);
-    font-size: 0.88rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
-    transition: opacity 0.15s;
-  }
-
-  .tree-link:hover { opacity: 0.6; }
-
-  .tree-count {
-    font-size: 0.72rem;
-    color: var(--muted);
-    flex-shrink: 0;
-    background: var(--hover);
-    padding: 0.05em 0.45em;
-    border-radius: 8px;
-    min-width: 1.4em;
-    text-align: center;
-  }
-
   .tree-empty {
     color: var(--muted);
     padding: 0.25rem 0.5rem;
     font-size: 0.85rem;
   }
 
-  /* ============ Mobile ============ */
+  /* 移动端 */
   @media (max-width: 860px) {
     #sidebar { display: none; }
   }
 </style>
-
-<script>
-  // 折叠/展开 — 事件委托，在 sidebar 上监听所有点击
-  document.getElementById("sidebar")?.addEventListener("click", (e) => {
-    const toggle = e.target.closest(".tree-toggle");
-    if (!toggle) return;
-
-    // 向上找到所在 <li>
-    const li = toggle.closest("li");
-    if (!li) return;
-
-    // 在 <li> 的直接子元素中找 ul.tree-children
-    let childUl = null;
-    for (let i = 0; i < li.children.length; i++) {
-      const c = li.children[i];
-      if (c.tagName === "UL" && c.classList.contains("tree-children")) {
-        childUl = c;
-        break;
-      }
-    }
-    if (!childUl) return;
-
-    childUl.classList.toggle("collapsed");
-    toggle.classList.toggle("collapsed");
-    const expanded = toggle.getAttribute("aria-expanded") === "true";
-    toggle.setAttribute("aria-expanded", String(!expanded));
-  });
-
-  // 高亮当前分类路径
-  (function highlightCurrent() {
-    const currentPath = window.location.pathname;
-    if (!currentPath.startsWith("/categories/")) return;
-
-    const links = document.querySelectorAll(".tree-link");
-    let bestMatch = null;
-    let bestLen = 0;
-
-    links.forEach((a) => {
-      const href = a.getAttribute("href");
-      if (!href) return;
-      const catPath = href.replace(/^\/categories\//, "");
-      const currentCat = currentPath.replace(/^\/categories\//, "");
-      if (currentCat.startsWith(catPath) && catPath.length > bestLen) {
-        bestLen = catPath.length;
-        bestMatch = a;
-      }
-    });
-
-    if (bestMatch) {
-      bestMatch.closest(".tree-row")?.classList.add("active");
-
-      // 展开所有父级 .tree-children
-      let childUl = bestMatch.closest(".tree-children");
-      while (childUl) {
-        childUl.classList.remove("collapsed");
-        const parentLi = childUl.closest("li");
-        if (parentLi) {
-          const toggle = parentLi.querySelector(":scope > .tree-row .tree-toggle");
-          if (toggle) {
-            toggle.classList.remove("collapsed");
-            toggle.setAttribute("aria-expanded", "true");
-          }
-        }
-        childUl = parentLi?.parentElement?.closest(".tree-children");
-      }
-    }
-  })();
-</script>

@@ -1,0 +1,219 @@
+---
+// 单节点组件，递归渲染子树
+interface CatNode {
+  name: string;
+  path: string;
+  count: number;
+  children: CatNode[];
+}
+
+const { name, path, count, children } = Astro.props as CatNode;
+const hasKids = children.length > 0;
+---
+
+<li>
+  <div class="tree-row">
+    {hasKids ? (
+      <span class="tree-toggle" aria-expanded="true" title="展开/折叠">▾</span>
+    ) : (
+      <span class="tree-icon"></span>
+    )}
+    <a href={`/categories/${path}`} class="tree-link">{name}</a>
+    <span class="tree-count">{count}</span>
+  </div>
+  {hasKids && (
+    <ul class="tree-children">
+      {children.map((child) => (
+        <Astro.self {...child} />
+      ))}
+    </ul>
+  )}
+</li>
+
+<style>
+  .tree-children {
+    list-style: none;
+    padding: 0 0 0 1.2rem;
+    margin: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease, opacity 0.25s ease;
+    max-height: 800px;
+  }
+  .tree-children.collapsed {
+    max-height: 0;
+    opacity: 0;
+  }
+
+  /* Tree Lines */
+  .tree-children > li { position: relative; }
+  .tree-children > li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.7rem;
+    width: 0.6rem;
+    height: 0;
+    border-top: 1.5px solid var(--border);
+  }
+  .tree-children > li::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    border-left: 1.5px solid var(--border);
+  }
+  .tree-children > li:last-child::after {
+    height: 0.7rem;
+  }
+
+  /* Row */
+  .tree-row {
+    display: flex;
+    align-items: center;
+    padding: 0.28rem 0.4rem;
+    gap: 0.35rem;
+    border-radius: 4px;
+    transition: background 0.12s;
+  }
+  .tree-row:hover { background: var(--hover); }
+  .tree-row.active {
+    background: #f0f0f0;
+    font-weight: 600;
+  }
+  .tree-row.active .tree-link { font-weight: 600; }
+
+  /* Toggle */
+  .tree-toggle {
+    cursor: pointer;
+    font-size: 0.65rem;
+    width: 1.1rem;
+    height: 1.1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    user-select: none;
+    color: var(--muted);
+    border-radius: 3px;
+    transition: transform 0.2s ease, background 0.12s;
+    line-height: 1;
+  }
+  .tree-toggle:hover { background: var(--border); color: var(--text); }
+  .tree-toggle.collapsed { transform: rotate(-90deg); }
+
+  /* Icon (leaf) */
+  .tree-icon {
+    width: 1.1rem;
+    flex-shrink: 0;
+    text-align: center;
+    font-size: 0.55rem;
+    color: var(--border);
+    line-height: 1;
+  }
+  .tree-children .tree-icon::after { content: "•"; }
+
+  /* Link & Count */
+  .tree-link {
+    flex: 1;
+    color: var(--text);
+    font-size: 0.88rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    transition: opacity 0.15s;
+  }
+  .tree-link:hover { opacity: 0.6; }
+
+  .tree-count {
+    font-size: 0.72rem;
+    color: var(--muted);
+    flex-shrink: 0;
+    background: var(--hover);
+    padding: 0.05em 0.45em;
+    border-radius: 8px;
+    min-width: 1.4em;
+    text-align: center;
+  }
+</style>
+
+<script>
+  // 折叠/展开 — 事件委托
+  function toggleClick(e: MouseEvent) {
+    const toggle = (e.target as HTMLElement).closest(".tree-toggle") as HTMLElement | null;
+    if (!toggle) return;
+    const li = toggle.closest("li");
+    if (!li) return;
+
+    let childUl: HTMLElement | null = null;
+    for (let i = 0; i < li.children.length; i++) {
+      const c = li.children[i];
+      if (c.tagName === "UL" && c.classList.contains("tree-children")) {
+        childUl = c as HTMLElement;
+        break;
+      }
+    }
+    if (!childUl) return;
+
+    childUl.classList.toggle("collapsed");
+    toggle.classList.toggle("collapsed");
+    const expanded = toggle.getAttribute("aria-expanded") === "true";
+    toggle.setAttribute("aria-expanded", String(!expanded));
+
+    e.stopPropagation();
+  }
+
+  function highlightCurrent() {
+    const currentPath = window.location.pathname;
+    if (!currentPath.startsWith("/categories/")) return;
+
+    const links = document.querySelectorAll<HTMLAnchorElement>(".tree-link");
+    let bestMatch: HTMLAnchorElement | null = null;
+    let bestLen = 0;
+
+    links.forEach((a) => {
+      const href = a.getAttribute("href");
+      if (!href) return;
+      const catPath = href.replace(/^\/categories\//, "");
+      const currentCat = currentPath.replace(/^\/categories\//, "");
+      if (currentCat.startsWith(catPath) && catPath.length > bestLen) {
+        bestLen = catPath.length;
+        bestMatch = a;
+      }
+    });
+
+    if (bestMatch) {
+      bestMatch.closest(".tree-row")?.classList.add("active");
+
+      let childUl = bestMatch.closest(".tree-children") as HTMLElement | null;
+      while (childUl) {
+        childUl.classList.remove("collapsed");
+        const parentLi = childUl.closest("li");
+        if (parentLi) {
+          const toggle = parentLi.querySelector(":scope > .tree-row .tree-toggle") as HTMLElement | null;
+          if (toggle) {
+            toggle.classList.remove("collapsed");
+            toggle.setAttribute("aria-expanded", "true");
+          }
+        }
+        childUl = parentLi?.parentElement?.closest(".tree-children") as HTMLElement | null;
+      }
+    }
+  }
+
+  // ---- 初始化 ----
+  function init() {
+    const sidebar = document.getElementById("sidebar");
+    if (sidebar) {
+      sidebar.addEventListener("click", toggleClick);
+    }
+    highlightCurrent();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+</script>

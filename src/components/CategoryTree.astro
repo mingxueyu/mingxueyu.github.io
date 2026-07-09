@@ -1,0 +1,171 @@
+---
+// 分类页面的树形组件（和 TreeItem 相同结构，但样式略有不同）
+interface CatNode {
+  name: string;
+  path: string;
+  count: number;
+  children: CatNode[];
+}
+
+const { name, path, count, children } = Astro.props as CatNode;
+const hasKids = children.length > 0;
+---
+
+<li>
+  <div class="ct-row">
+    {hasKids ? (
+      <span class="ct-toggle" aria-expanded="true" title="展开/折叠">▾</span>
+    ) : (
+      <span class="ct-dot"></span>
+    )}
+    <a href={`/categories/${path}`} class="ct-link">{name}</a>
+    <span class="ct-count">{count}</span>
+  </div>
+  {hasKids && (
+    <ul class="ct-children">
+      {children.map((child) => (
+        <Astro.self {...child} />
+      ))}
+    </ul>
+  )}
+</li>
+
+<style>
+  .ct-children {
+    list-style: none;
+    padding: 0 0 0 1.6rem;
+    margin: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease, opacity 0.25s ease;
+    max-height: 1200px;
+  }
+  .ct-children.collapsed {
+    max-height: 0;
+    opacity: 0;
+  }
+
+  /* Tree Lines */
+  .ct-children > li { position: relative; }
+  .ct-children > li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.85rem;
+    width: 0.85rem;
+    height: 0;
+    border-top: 1.5px solid var(--border);
+  }
+  .ct-children > li::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    border-left: 1.5px solid var(--border);
+  }
+  .ct-children > li:last-child::after {
+    height: 0.85rem;
+  }
+
+  /* Row */
+  .ct-row {
+    display: flex;
+    align-items: center;
+    padding: 0.35rem 0.5rem;
+    gap: 0.45rem;
+    border-radius: 4px;
+    transition: background 0.12s;
+    font-size: 0.95rem;
+  }
+  .ct-row:hover { background: var(--hover); }
+
+  /* Toggle */
+  .ct-toggle {
+    cursor: pointer;
+    font-size: 0.7rem;
+    width: 1.2rem;
+    height: 1.2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    user-select: none;
+    color: var(--muted);
+    border-radius: 3px;
+    transition: transform 0.2s ease, background 0.12s;
+    line-height: 1;
+  }
+  .ct-toggle:hover { background: var(--border); color: var(--text); }
+  .ct-toggle.collapsed { transform: rotate(-90deg); }
+
+  /* Dot */
+  .ct-dot {
+    width: 1.2rem;
+    flex-shrink: 0;
+    text-align: center;
+    font-size: 0.6rem;
+    color: var(--border);
+    line-height: 1;
+  }
+  .ct-children .ct-dot::after { content: "•"; }
+
+  /* Link & Count */
+  .ct-link {
+    color: var(--text);
+    font-weight: 500;
+    transition: opacity 0.15s;
+  }
+  .ct-link:hover { opacity: 0.6; }
+
+  .ct-count {
+    font-size: 0.75rem;
+    color: var(--muted);
+    flex-shrink: 0;
+    background: var(--hover);
+    padding: 0.05em 0.5em;
+    border-radius: 8px;
+  }
+
+  @media (max-width: 540px) {
+    .ct-children { padding-left: 1.2rem; }
+    .ct-row { font-size: 0.9rem; }
+  }
+</style>
+
+<script>
+  function ctClick(e: MouseEvent) {
+    const toggle = (e.target as HTMLElement).closest(".ct-toggle") as HTMLElement | null;
+    if (!toggle) return;
+    const li = toggle.closest("li");
+    if (!li) return;
+
+    let childUl: HTMLElement | null = null;
+    for (let i = 0; i < li.children.length; i++) {
+      const c = li.children[i];
+      if (c.tagName === "UL" && c.classList.contains("ct-children")) {
+        childUl = c as HTMLElement;
+        break;
+      }
+    }
+    if (!childUl) return;
+
+    childUl.classList.toggle("collapsed");
+    toggle.classList.toggle("collapsed");
+    const expanded = toggle.getAttribute("aria-expanded") === "true";
+    toggle.setAttribute("aria-expanded", String(!expanded));
+    e.stopPropagation();
+  }
+
+  function init() {
+    const wrap = document.querySelector(".cat-tree-wrap");
+    if (wrap) {
+      wrap.addEventListener("click", ctClick);
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+</script>

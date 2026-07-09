@@ -23,8 +23,7 @@ for (const post of posts) {
 
 function renderNode(
   map: Map<string, Node>,
-  prefix = "",
-  depth = 0
+  prefix = ""
 ): string {
   const entries = [...map.entries()].sort(
     (a, b) => b[1].count - a[1].count
@@ -33,19 +32,18 @@ function renderNode(
     .map(([name, node]) => {
       const path = prefix ? `${prefix}/${name}` : name;
       const hasKids = node.children.size > 0;
-      const id = "cat-" + path.replace(/[/]/g, "-");
       const spacer = '<span class="tree-icon"></span>';
       return `<li>
           <div class="tree-row">
             ${hasKids
-              ? `<span class="tree-toggle" data-target="${id}" aria-expanded="true" title="展开/折叠">▾</span>`
+              ? `<span class="tree-toggle" aria-expanded="true" title="展开/折叠">▾</span>`
               : spacer
             }
             <a href="/categories/${path}" class="tree-link">${name}</a>
             <span class="tree-count">${node.count}</span>
           </div>
           ${hasKids
-            ? `<ul id="${id}" class="tree-children">${renderNode(node.children, path, depth + 1)}</ul>`
+            ? `<ul class="tree-children">${renderNode(node.children, path)}</ul>`
             : ""}
         </li>`;
     })
@@ -258,16 +256,20 @@ function renderNode(
 </style>
 
 <script>
-  // 折叠/展开
-  document.querySelectorAll(".tree-toggle").forEach((el) => {
-    el.addEventListener("click", () => {
-      const targetId = (el as HTMLElement).dataset.target!;
-      const ul = document.getElementById(targetId)!;
-      ul.classList.toggle("collapsed");
-      el.classList.toggle("collapsed");
-      el.setAttribute(
+  // 折叠/展开 — 使用 DOM 遍历而不是 getElementById，更可靠
+  document.querySelectorAll(".tree-toggle").forEach((toggle) => {
+    toggle.addEventListener("click", () => {
+      // 找到 toggle 所在的 <li>，然后找其下的直接子 ul.tree-children
+      const li = toggle.closest("li");
+      if (!li) return;
+      const childUl = li.querySelector(":scope > .tree-children") as HTMLElement | null;
+      if (!childUl) return;
+
+      childUl.classList.toggle("collapsed");
+      toggle.classList.toggle("collapsed");
+      toggle.setAttribute(
         "aria-expanded",
-        el.getAttribute("aria-expanded") === "true" ? "false" : "true"
+        toggle.getAttribute("aria-expanded") === "true" ? "false" : "true"
       );
     });
   });
@@ -284,7 +286,6 @@ function renderNode(
     links.forEach((a) => {
       const href = a.getAttribute("href");
       if (!href) return;
-      // Convert "/categories/技术/前端" → matching prefix
       const catPath = href.replace(/^\/categories\//, "");
       const currentCat = currentPath.replace(/^\/categories\//, "");
       if (currentCat.startsWith(catPath) && catPath.length > bestLen) {
@@ -296,18 +297,20 @@ function renderNode(
     if (bestMatch) {
       bestMatch.closest(".tree-row")?.classList.add("active");
 
-      // 展开所有父级
-      let parent = bestMatch.closest(".tree-children");
-      while (parent) {
-        parent.classList.remove("collapsed");
-        const toggle = document.querySelector(
-          `[data-target="${parent.id}"]`
-        ) as HTMLElement | null;
-        if (toggle) {
-          toggle.classList.remove("collapsed");
-          toggle.setAttribute("aria-expanded", "true");
+      // 展开所有父级 .tree-children
+      let childUl = bestMatch.closest(".tree-children") as HTMLElement | null;
+      while (childUl) {
+        childUl.classList.remove("collapsed");
+        // 找到父 li 中的 .tree-toggle 并展开
+        const parentLi = childUl.closest("li");
+        if (parentLi) {
+          const toggle = parentLi.querySelector(":scope > .tree-row .tree-toggle") as HTMLElement | null;
+          if (toggle) {
+            toggle.classList.remove("collapsed");
+            toggle.setAttribute("aria-expanded", "true");
+          }
         }
-        parent = parent.parentElement?.closest(".tree-children") ?? null;
+        childUl = parentLi?.parentElement?.closest(".tree-children") as HTMLElement | null;
       }
     }
   })();

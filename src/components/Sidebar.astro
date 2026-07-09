@@ -77,8 +77,9 @@ function renderNode(
     border-right: 1px solid var(--border);
     background: var(--bg);
     overflow-y: auto;
+    overflow-x: hidden;
     z-index: 10;
-    padding: 1.5rem 1rem 1.5rem 0.75rem;
+    padding: 1.5rem 1rem 1.5rem 1rem;
     font-size: 0.88rem;
   }
 
@@ -111,7 +112,7 @@ function renderNode(
   /* ============ Children List ============ */
   .tree-children {
     list-style: none;
-    padding: 0 0 0 1.4rem;
+    padding: 0 0 0 1.2rem;
     margin: 0;
     overflow: hidden;
     transition: max-height 0.25s ease, opacity 0.25s ease;
@@ -133,8 +134,8 @@ function renderNode(
     content: "";
     position: absolute;
     left: 0;
-    top: 0.75rem;
-    width: 0.7rem;
+    top: 0.7rem;
+    width: 0.6rem;
     height: 0;
     border-top: 1.5px solid var(--border);
   }
@@ -151,7 +152,7 @@ function renderNode(
 
   /* Last child: cut vertical line so it doesn't extend past its row */
   .tree-children > li:last-child::after {
-    height: 0.75rem;
+    height: 0.7rem;
   }
 
   /* ============ Tree Row ============ */

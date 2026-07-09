@@ -33,13 +33,13 @@ function renderNode(
     .map(([name, node]) => {
       const path = prefix ? `${prefix}/${name}` : name;
       const hasKids = node.children.size > 0;
-      const id = "cat-" + path.replace(/\//g, "-");
-      return `
-        <li>
-          <div class="tree-row" style="padding-left:${depth * 1}rem">
+      const id = "cat-" + path.replace(/[/]/g, "-");
+      const spacer = '<span class="tree-icon"></span>';
+      return `<li>
+          <div class="tree-row">
             ${hasKids
-              ? `<span class="tree-toggle" data-target="${id}" aria-expanded="true">▾</span>`
-              : `<span class="tree-spacer"></span>`
+              ? `<span class="tree-toggle" data-target="${id}" aria-expanded="true" title="展开/折叠">▾</span>`
+              : spacer
             }
             <a href="/categories/${path}" class="tree-link">${name}</a>
             <span class="tree-count">${node.count}</span>
@@ -56,12 +56,13 @@ function renderNode(
 <aside id="sidebar">
   <div id="sidebar-inner">
     <div class="sidebar-head">
-      <a href="/categories" class="sidebar-title">分类</a>
+      <a href="/categories" class="sidebar-title">📂 分类</a>
     </div>
     <nav>
-      <ul class="tree-root">
-        {root.size > 0 ? renderNode(root) : '<li class="tree-empty">暂无分类</li>'}
-      </ul>
+      {root.size > 0
+        ? <ul class="tree-root" set:html={renderNode(root)} />
+        : <ul class="tree-root"><li class="tree-empty">暂无分类</li></ul>
+      }
     </nav>
   </div>
 </aside>
@@ -71,66 +72,154 @@ function renderNode(
     position: fixed;
     top: 0;
     left: 0;
-    width: 220px;
+    width: 230px;
     height: 100vh;
     border-right: 1px solid var(--border);
     background: var(--bg);
     overflow-y: auto;
     z-index: 10;
-    padding: 1.5rem 1rem;
+    padding: 1.5rem 1rem 1.5rem 0.75rem;
     font-size: 0.88rem;
   }
+
   .sidebar-head {
     margin-bottom: 1rem;
     padding-bottom: 0.75rem;
+    padding-left: 0.5rem;
     border-bottom: 1px solid var(--border);
   }
+
   .sidebar-title {
     font-weight: 600;
     font-size: 0.95rem;
+    color: var(--text);
   }
-  .tree-root,
-  .tree-children {
+
+  .sidebar-title:hover { opacity: 0.6; }
+
+  /* ============ Tree Root ============ */
+  .tree-root {
     list-style: none;
     padding: 0;
     margin: 0;
   }
-  .tree-children {
-    overflow: hidden;
-    transition: max-height 0.2s ease;
-    max-height: 600px;
+
+  .tree-root > li {
+    position: relative;
   }
+
+  /* ============ Children List ============ */
+  .tree-children {
+    list-style: none;
+    padding: 0 0 0 1.4rem;
+    margin: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease, opacity 0.25s ease;
+    max-height: 800px;
+  }
+
   .tree-children.collapsed {
     max-height: 0;
+    opacity: 0;
   }
+
+  /* ============ Tree Lines (within children only) ============ */
+  .tree-children > li {
+    position: relative;
+  }
+
+  /* Horizontal branch: ─── */
+  .tree-children > li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.75rem;
+    width: 0.7rem;
+    height: 0;
+    border-top: 1.5px solid var(--border);
+  }
+
+  /* Vertical line going down │ */
+  .tree-children > li::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    border-left: 1.5px solid var(--border);
+  }
+
+  /* Last child: cut vertical line so it doesn't extend past its row */
+  .tree-children > li:last-child::after {
+    height: 0.75rem;
+  }
+
+  /* ============ Tree Row ============ */
   .tree-row {
     display: flex;
     align-items: center;
-    padding: 0.25rem 0;
-    gap: 0.3rem;
-    border-radius: 3px;
-    transition: background 0.1s;
+    padding: 0.28rem 0.4rem;
+    gap: 0.35rem;
+    border-radius: 4px;
+    transition: background 0.12s;
   }
+
   .tree-row:hover {
     background: var(--hover);
   }
+
+  /* Highlight current category when on its page */
+  .tree-row.active {
+    background: #f0f0f0;
+    font-weight: 600;
+  }
+
+  .tree-row.active .tree-link {
+    font-weight: 600;
+  }
+
+  /* ============ Toggle Arrow ============ */
   .tree-toggle {
     cursor: pointer;
-    font-size: 0.7rem;
-    width: 1rem;
-    text-align: center;
+    font-size: 0.65rem;
+    width: 1.1rem;
+    height: 1.1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     flex-shrink: 0;
     user-select: none;
     color: var(--muted);
-    transition: transform 0.15s;
+    border-radius: 3px;
+    transition: transform 0.2s ease, background 0.12s;
+    line-height: 1;
   }
+
+  .tree-toggle:hover {
+    background: var(--border);
+    color: var(--text);
+  }
+
   .tree-toggle.collapsed {
     transform: rotate(-90deg);
   }
-  .tree-spacer {
-    width: 1rem;
+
+  /* ============ Icon placeholder (leaf nodes) ============ */
+  .tree-icon {
+    width: 1.1rem;
     flex-shrink: 0;
+    text-align: center;
+    font-size: 0.55rem;
+    color: var(--border);
+    line-height: 1;
   }
+
+  /* Small dot for leaf nodes */
+  .tree-children .tree-icon::after {
+    content: "•";
+  }
+
+  /* ============ Link & Count ============ */
   .tree-link {
     flex: 1;
     color: var(--text);
@@ -138,25 +227,32 @@ function renderNode(
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-  .tree-link:hover {
-    opacity: 0.6;
-  }
-  .tree-count {
-    font-size: 0.75rem;
-    color: var(--muted);
-    flex-shrink: 0;
-  }
-  .tree-empty {
-    color: var(--muted);
-    padding: 0.25rem 0;
+    min-width: 0;
+    transition: opacity 0.15s;
   }
 
-  /* 移动端：隐藏侧栏 */
+  .tree-link:hover { opacity: 0.6; }
+
+  .tree-count {
+    font-size: 0.72rem;
+    color: var(--muted);
+    flex-shrink: 0;
+    background: var(--hover);
+    padding: 0.05em 0.45em;
+    border-radius: 8px;
+    min-width: 1.4em;
+    text-align: center;
+  }
+
+  .tree-empty {
+    color: var(--muted);
+    padding: 0.25rem 0.5rem;
+    font-size: 0.85rem;
+  }
+
+  /* ============ Mobile ============ */
   @media (max-width: 860px) {
-    #sidebar {
-      display: none;
-    }
+    #sidebar { display: none; }
   }
 </style>
 
@@ -174,4 +270,44 @@ function renderNode(
       );
     });
   });
+
+  // 高亮当前分类路径
+  (function highlightCurrent() {
+    const currentPath = window.location.pathname;
+    if (!currentPath.startsWith("/categories/")) return;
+
+    const links = document.querySelectorAll<HTMLAnchorElement>(".tree-link");
+    let bestMatch: HTMLAnchorElement | null = null;
+    let bestLen = 0;
+
+    links.forEach((a) => {
+      const href = a.getAttribute("href");
+      if (!href) return;
+      // Convert "/categories/技术/前端" → matching prefix
+      const catPath = href.replace(/^\/categories\//, "");
+      const currentCat = currentPath.replace(/^\/categories\//, "");
+      if (currentCat.startsWith(catPath) && catPath.length > bestLen) {
+        bestLen = catPath.length;
+        bestMatch = a;
+      }
+    });
+
+    if (bestMatch) {
+      bestMatch.closest(".tree-row")?.classList.add("active");
+
+      // 展开所有父级
+      let parent = bestMatch.closest(".tree-children");
+      while (parent) {
+        parent.classList.remove("collapsed");
+        const toggle = document.querySelector(
+          `[data-target="${parent.id}"]`
+        ) as HTMLElement | null;
+        if (toggle) {
+          toggle.classList.remove("collapsed");
+          toggle.setAttribute("aria-expanded", "true");
+        }
+        parent = parent.parentElement?.closest(".tree-children") ?? null;
+      }
+    }
+  })();
 </script>

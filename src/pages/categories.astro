@@ -4,7 +4,7 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 
 const posts = await getCollection("blog");
 
-// 构建分类树：{ "技术": { "前端": count, "后端": count }, "生活": count }
+// 构建分类树
 interface Node {
   count: number;
   children: Map<string, Node>;
@@ -27,7 +27,7 @@ for (const post of posts) {
   }
 }
 
-// 递归渲染 HTML
+// 递归渲染树形 HTML
 function renderTree(
   map: Map<string, Node>,
   prefix: string = "",
@@ -40,21 +40,21 @@ function renderTree(
   return entries
     .map(([name, node]) => {
       const path = prefix ? `${prefix}/${name}` : name;
-      const indent = "&nbsp;&nbsp;&nbsp;&nbsp;".repeat(depth);
-      const arrow = node.children.size > 0 ? " ▸" : "";
+      const hasKids = node.children.size > 0;
       const children = renderTree(node.children, path, depth + 1);
 
-      return `
-        <div style="margin: 0.4rem 0;">
-          ${indent}
-          <a href="/categories/${path}" style="font-weight: 600;">
-            📁 ${name}${arrow}
-          </a>
-          <span style="color: var(--color-muted); font-size: 0.85rem;">
-            (${node.count})
-          </span>
-          ${children}
+      const row = `<div class="ct-row">
+          ${hasKids
+            ? `<span class="ct-toggle" aria-expanded="true" title="展开/折叠">▾</span>`
+            : `<span class="ct-dot"></span>`
+          }
+          <a href="/categories/${path}" class="ct-link">${name}</a>
+          <span class="ct-count">${node.count}</span>
         </div>`;
+
+      return hasKids
+        ? `<li>${row}<ul class="ct-children">${children}</ul></li>`
+        : `<li>${row}</li>`;
     })
     .join("");
 }
@@ -68,19 +68,25 @@ const uncategorized = posts.filter(
 ---
 
 <BaseLayout title="分类">
-  <h1>分类</h1>
-  <div style="margin-top: 1rem;">
-    {treeHtml ? treeHtml : '<p style="color: var(--color-muted);">暂无分类</p>'}
+  <h1>📂 分类</h1>
+
+  <div class="cat-tree-wrap">
+    {
+      treeHtml
+        ? <ul class="ct-root" set:html={treeHtml} />
+        : <p style="color: var(--muted);">暂无分类</p>
+    }
   </div>
+
   {
     uncategorized.length > 0 && (
-      <div style="margin-top: 2rem;">
+      <div style="margin-top: 3rem;">
         <h3>未分类</h3>
         <ul style="list-style: none;">
           {uncategorized.map((p) => (
             <li style="margin: 0.3rem 0;">
               <a href={`/blog/${p.id}`}>{p.data.title}</a>
-              <span style="color: var(--color-muted); font-size: 0.85rem;">
+              <span style="color: var(--muted); font-size: 0.85rem;">
                 {" "}({p.data.date.toLocaleDateString("zh-CN")})
               </span>
             </li>
@@ -90,3 +96,170 @@ const uncategorized = posts.filter(
     )
   }
 </BaseLayout>
+
+<style>
+  .cat-tree-wrap {
+    margin-top: 1.5rem;
+  }
+
+  /* ============ Root ============ */
+  .ct-root {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .ct-root > li {
+    position: relative;
+  }
+
+  /* ============ Children ============ */
+  .ct-children {
+    list-style: none;
+    padding: 0 0 0 1.6rem;
+    margin: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease, opacity 0.25s ease;
+    max-height: 1200px;
+  }
+
+  .ct-children.collapsed {
+    max-height: 0;
+    opacity: 0;
+  }
+
+  /* ============ Tree Lines ============ */
+  .ct-children > li {
+    position: relative;
+  }
+
+  /* Horizontal branch ── */
+  .ct-children > li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.85rem;
+    width: 0.85rem;
+    height: 0;
+    border-top: 1.5px solid var(--border);
+  }
+
+  /* Vertical line │ */
+  .ct-children > li::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    border-left: 1.5px solid var(--border);
+  }
+
+  /* Last child: stop vertical line at row center */
+  .ct-children > li:last-child::after {
+    height: 0.85rem;
+  }
+
+  /* ============ Row ============ */
+  .ct-row {
+    display: flex;
+    align-items: center;
+    padding: 0.35rem 0.5rem;
+    gap: 0.45rem;
+    border-radius: 4px;
+    transition: background 0.12s;
+    font-size: 0.95rem;
+  }
+
+  .ct-row:hover {
+    background: var(--hover);
+  }
+
+  /* ============ Toggle ============ */
+  .ct-toggle {
+    cursor: pointer;
+    font-size: 0.7rem;
+    width: 1.2rem;
+    height: 1.2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    user-select: none;
+    color: var(--muted);
+    border-radius: 3px;
+    transition: transform 0.2s ease, background 0.12s;
+    line-height: 1;
+  }
+
+  .ct-toggle:hover {
+    background: var(--border);
+    color: var(--text);
+  }
+
+  .ct-toggle.collapsed {
+    transform: rotate(-90deg);
+  }
+
+  /* ============ Leaf dot ============ */
+  .ct-dot {
+    width: 1.2rem;
+    flex-shrink: 0;
+    text-align: center;
+    font-size: 0.6rem;
+    color: var(--border);
+    line-height: 1;
+  }
+
+  .ct-children .ct-dot::after {
+    content: "•";
+  }
+
+  /* ============ Link ============ */
+  .ct-link {
+    color: var(--text);
+    font-weight: 500;
+    transition: opacity 0.15s;
+  }
+
+  .ct-link:hover {
+    opacity: 0.6;
+  }
+
+  /* ============ Count badge ============ */
+  .ct-count {
+    font-size: 0.75rem;
+    color: var(--muted);
+    flex-shrink: 0;
+    background: var(--hover);
+    padding: 0.05em 0.5em;
+    border-radius: 8px;
+  }
+
+  /* ============ Responsive ============ */
+  @media (max-width: 540px) {
+    .ct-children {
+      padding-left: 1.2rem;
+    }
+    .ct-row {
+      font-size: 0.9rem;
+    }
+  }
+</style>
+
+<script>
+  document.querySelectorAll(".ct-toggle").forEach((el) => {
+    el.addEventListener("click", () => {
+      const li = (el as HTMLElement).closest("li");
+      if (!li) return;
+      // 找到直接子 ul.ct-children
+      const childUl = li.querySelector(":scope > .ct-children") as HTMLElement | null;
+      if (!childUl) return;
+      childUl.classList.toggle("collapsed");
+      el.classList.toggle("collapsed");
+      el.setAttribute(
+        "aria-expanded",
+        el.getAttribute("aria-expanded") === "true" ? "false" : "true"
+      );
+    });
+  });
+</script>

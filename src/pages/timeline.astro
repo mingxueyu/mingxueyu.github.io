@@ -2,128 +2,43 @@
 import { getCollection } from "astro:content";
 import BaseLayout from "../layouts/BaseLayout.astro";
 
-const allPosts = (await getCollection("blog")).filter((p) => !p.data.draft);
-
-// 构建分类树：{ "分类路径": [文章列表] }
-interface PostItem {
-  id: string;
-  title: string;
-  date: Date;
-  tags: string[];
-}
-const tree: Map<string, PostItem[]> = new Map();
-
-// 无分类文章
-const uncategorized: PostItem[] = [];
-
-for (const post of allPosts) {
-  const item: PostItem = {
-    id: post.id,
-    title: post.data.title,
-    date: post.data.date,
-    tags: post.data.tags || [],
-  };
-  const cats = post.data.categories;
-  if (cats.length === 0) {
-    uncategorized.push(item);
-    continue;
-  }
-  // 为每个分类层级都注册（如 "技术" 和 "技术/前端"）
-  for (let i = 0; i < cats.length; i++) {
-    const path = cats.slice(0, i + 1).join("/");
-    if (!tree.has(path)) tree.set(path, []);
-    tree.get(path)!.push(item);
-  }
-}
-
-// 每个路径下的文章按日期降序排列
-for (const [, posts] of tree) {
-  posts.sort((a, b) => b.date.getTime() - a.date.getTime());
-}
-uncategorized.sort((a, b) => b.date.getTime() - a.date.getTime());
-
-// 转为可排序的展示列表
-interface TimelineGroup {
-  path: string;    // "技术/前端"
-  depth: number;   // 层级深度
-  name: string;    // 显示名（最后一段）
-  posts: PostItem[];
-}
-const groups: TimelineGroup[] = [];
-for (const [path, posts] of tree) {
-  const segs = path.split("/");
-  groups.push({ path, depth: segs.length, name: segs[segs.length - 1], posts });
-}
-// 按路径字母排序，保证父子层级相邻
-groups.sort((a, b) => a.path.localeCompare(b.path, "zh-CN"));
+const posts = (await getCollection("blog"))
+  .filter((p) => !p.data.draft)
+  .sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
 ---
 
 <BaseLayout title="时间线">
   <h1>📅 时间线</h1>
 
-  {groups.length === 0 && uncategorized.length === 0 ? (
+  {posts.length === 0 ? (
     <p style="color: var(--muted);">暂无文章</p>
   ) : (
     <div class="timeline">
-      {groups.map((group) => (
-        <div class="tl-group">
-          <div class="tl-group-head" style={`padding-left: ${(group.depth - 1) * 1.5}rem;`}>
-            <span class="tl-group-icon">{group.depth === 1 ? "📁" : "└"}</span>
-            <a href={`/categories/${group.path}`} class="tl-group-name">{group.name}</a>
-            <span class="tl-group-count">{group.posts.length} 篇</span>
-          </div>
-          {group.posts.map((post) => (
-            <div class="tl-item" style={`padding-left: ${group.depth * 1.5}rem;`}>
-              <span class="tl-dot"></span>
-              <span class="tl-date">
-                {post.date.toLocaleDateString("zh-CN", {
-                  year: "numeric",
-                  month: "2-digit",
-                  day: "2-digit",
-                })}
-              </span>
-              <a class="tl-title" href={`/blog/${post.id}`}>{post.title}</a>
-              {post.tags.length > 0 && (
-                <span class="tl-tags">
-                  {post.tags.map((tag) => (
-                    <a class="tag" href={`/tags/${tag}`}>#{tag}</a>
-                  ))}
-                </span>
-              )}
-            </div>
-          ))}
+      {posts.map((post) => (
+        <div class="tl-item">
+          <span class="tl-dot"></span>
+          <span class="tl-date">
+            {post.data.date.toLocaleDateString("zh-CN", {
+              year: "numeric",
+              month: "2-digit",
+              day: "2-digit",
+            })}
+          </span>
+          <a class="tl-title" href={`/blog/${post.id}`}>{post.data.title}</a>
+          {post.data.categories.length > 0 && (
+            <a class="tl-cat" href={`/categories/${post.data.categories.join("/")}`}>
+              {post.data.categories.join(" / ")}
+            </a>
+          )}
+          {post.data.tags.length > 0 && (
+            <span class="tl-tags">
+              {post.data.tags.map((tag) => (
+                <a class="tag" href={`/tags/${tag}`}>#{tag}</a>
+              ))}
+            </span>
+          )}
         </div>
       ))}
-
-      {uncategorized.length > 0 && (
-        <div class="tl-group">
-          <div class="tl-group-head">
-            <span class="tl-group-icon">📄</span>
-            <span class="tl-group-name">未分类</span>
-            <span class="tl-group-count">{uncategorized.length} 篇</span>
-          </div>
-          {uncategorized.map((post) => (
-            <div class="tl-item" style="padding-left: 1.5rem;">
-              <span class="tl-dot"></span>
-              <span class="tl-date">
-                {post.date.toLocaleDateString("zh-CN", {
-                  year: "numeric",
-                  month: "2-digit",
-                  day: "2-digit",
-                })}
-              </span>
-              <a class="tl-title" href={`/blog/${post.id}`}>{post.title}</a>
-              {post.tags.length > 0 && (
-                <span class="tl-tags">
-                  {post.tags.map((tag) => (
-                    <a class="tag" href={`/tags/${tag}`}>#{tag}</a>
-                  ))}
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   )}
 </BaseLayout>
@@ -134,7 +49,6 @@ groups.sort((a, b) => a.path.localeCompare(b.path, "zh-CN"));
     position: relative;
   }
 
-  /* 左侧竖线 */
   .timeline::before {
     content: "";
     position: absolute;
@@ -146,48 +60,15 @@ groups.sort((a, b) => a.path.localeCompare(b.path, "zh-CN"));
     border-radius: 1px;
   }
 
-  .tl-group {
-    margin-bottom: 1.5rem;
-  }
-
-  .tl-group-head {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.35rem 0 0.35rem 0;
-    position: relative;
-  }
-
-  .tl-group-icon {
-    font-size: 1rem;
-    flex-shrink: 0;
-  }
-
-  .tl-group-name {
-    font-weight: 600;
-    font-size: 0.95rem;
-    color: var(--text);
-  }
-  .tl-group-name:hover { opacity: 0.6; }
-
-  .tl-group-count {
-    font-size: 0.75rem;
-    color: var(--muted);
-    background: var(--hover);
-    padding: 0.05em 0.5em;
-    border-radius: 8px;
-  }
-
   .tl-item {
     display: flex;
     align-items: baseline;
     flex-wrap: wrap;
     gap: 0.5rem;
-    padding: 0.5rem 0 0.5rem 0;
+    padding: 0.5rem 0 0.5rem 1.8rem;
     position: relative;
   }
 
-  /* 时间点圆点 */
   .tl-dot {
     position: absolute;
     left: 0.1rem;
@@ -198,7 +79,6 @@ groups.sort((a, b) => a.path.localeCompare(b.path, "zh-CN"));
     background: var(--text);
     border: 2px solid var(--bg);
     z-index: 1;
-    flex-shrink: 0;
   }
 
   .tl-date {
@@ -215,6 +95,18 @@ groups.sort((a, b) => a.path.localeCompare(b.path, "zh-CN"));
   }
   .tl-title:hover { opacity: 0.6; }
 
+  .tl-cat {
+    font-size: 0.75rem;
+    color: var(--muted);
+    background: var(--hover);
+    padding: 0.05em 0.55em;
+    border-radius: 8px;
+    margin-left: auto;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .tl-cat:hover { opacity: 0.7; }
+
   .tl-tags {
     display: inline-flex;
     flex-wrap: wrap;
@@ -222,7 +114,9 @@ groups.sort((a, b) => a.path.localeCompare(b.path, "zh-CN"));
   }
 
   @media (max-width: 540px) {
+    .tl-item { padding-left: 1.4rem; }
     .tl-date { min-width: 4.5rem; font-size: 0.78rem; }
     .tl-title { font-size: 0.92rem; }
+    .tl-cat { margin-left: 0; }
   }
 </style>

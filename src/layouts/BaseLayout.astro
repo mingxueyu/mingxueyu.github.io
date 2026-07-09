@@ -1,10 +1,32 @@
 ---
 import "../styles/global.css";
 import Sidebar from "../components/Sidebar.astro";
+import AudioPlayer from "../components/AudioPlayer.astro";
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
 
 export interface Props {
   title: string;
   description?: string;
+}
+
+// 扫描 public/gallery/ 中的图片
+const galleryDir = join(process.cwd(), "public", "gallery");
+let galleryImages: string[] = [];
+let galleryScript = "";
+let galleryStyle = "";
+try {
+  galleryImages = readdirSync(galleryDir)
+    .filter((f) => /\.(jpg|jpeg|png|webp|avif|gif)$/i.test(f))
+    .map((f) => `/gallery/${f}`);
+
+  if (galleryImages.length > 0) {
+    const json = JSON.stringify(galleryImages);
+    galleryScript = `(function(){const imgs=${json};const u='url('+imgs[Math.floor(Math.random()*imgs.length)]+')';document.documentElement.style.backgroundImage=u;document.documentElement.classList.add('has-gallery');})();`;
+    galleryStyle = `html.has-gallery{background-size:cover;background-position:center;background-attachment:fixed;background-repeat:no-repeat}body{background:transparent}`;
+  }
+} catch {
+  // 目录不存在或为空
 }
 ---
 
@@ -19,6 +41,7 @@ export interface Props {
   </head>
   <body>
     <Sidebar />
+    <AudioPlayer />
     <div id="page-wrap">
     <header class="site-header">
       <a class="logo" href="/">treefish</a>
@@ -26,6 +49,7 @@ export interface Props {
         <a href="/">文章</a>
         <a href="/categories">分类</a>
         <a href="/tags">标签</a>
+        <a href="/timeline">时间线</a>
         <a href="/search">搜索</a>
         <a href="/about">关于</a>
       </nav>
@@ -39,5 +63,9 @@ export interface Props {
       &copy; {new Date().getFullYear()} treefish.top
     </footer>
     </div>
+
+    {galleryScript && (
+      <div set:html={`<script>${galleryScript}</script><style>${galleryStyle}</style>`} style="display:none" />
+    )}
   </body>
 </html>

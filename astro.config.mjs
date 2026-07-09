@@ -10,4 +10,11 @@ export default defineConfig({
       theme: "github-dark",
     },
   },
+  vite: {
+    server: {
+      watch: {
+        ignored: ["**/public/audio/**"],
+      },
+    },
+  },
 });

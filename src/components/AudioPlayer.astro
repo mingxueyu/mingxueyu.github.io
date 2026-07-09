@@ -1,0 +1,308 @@
+---
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
+
+const audioDir = join(process.cwd(), "public", "audio");
+let playlist: { url: string; name: string }[] = [];
+try {
+  playlist = readdirSync(audioDir)
+    .filter((f) => /\.(mp3|ogg|wav|m4a|flac)$/i.test(f))
+    .map((f) => ({
+      url: `/audio/${encodeURIComponent(f)}`,
+      name: f.replace(/\.[^.]+$/, ""),
+    }));
+} catch {}
+
+const hasAudio = playlist.length > 0;
+const playlistJson = JSON.stringify(playlist);
+
+// 播放器脚本
+const playerJs = hasAudio ? `
+(function(playlist){
+  if (!playlist.length) return;
+
+  var STORE_KEY = 'bg-player-state';
+  var audio = new Audio();
+  audio.loop = false;
+  audio.volume = 0.5;
+
+  var state = { index: 0, time: 0, playing: true, volume: 0.5 };
+
+  try {
+    var saved = JSON.parse(localStorage.getItem(STORE_KEY));
+    if (saved) { state.index = saved.index % playlist.length; state.time = saved.time || 0; state.playing = saved.playing !== false; state.volume = saved.volume != null ? saved.volume : 0.5; }
+  } catch(e) {}
+
+  var currentIndex = state.index;
+  audio.volume = state.volume;
+  audio.preload = 'auto';
+
+  function saveState() {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify({ index: currentIndex, time: audio.currentTime, playing: !audio.paused, volume: audio.volume }));
+    } catch(e) {}
+  }
+
+  // ---- DOM ----
+  var btn = document.createElement('div');
+  btn.id = 'bg-player-btn';
+  btn.title = '背景音乐';
+  btn.innerHTML = '🎵';
+
+  var popup = document.createElement('div');
+  popup.id = 'bg-player-popup';
+  popup.innerHTML = '<div class="pp-title"></div>'
+    + '<div class="pp-controls">'
+    + '<button id="pp-prev" title="上一首">⏮</button>'
+    + '<button id="pp-play" title="播放/暂停">▶</button>'
+    + '<button id="pp-next" title="下一首">⏭</button>'
+    + '</div>'
+    + '<input type="range" class="pp-progress" id="pp-progress" min="0" max="100" value="0" />'
+    + '<div class="pp-vol">🔊 <input type="range" id="pp-vol" min="0" max="100" value="50" /></div>';
+
+  document.body.appendChild(btn);
+  document.body.appendChild(popup);
+
+  var titleEl = popup.querySelector('.pp-title');
+  var playBtn = popup.querySelector('#pp-play');
+  var progressEl = popup.querySelector('#pp-progress');
+  var volInput = popup.querySelector('#pp-vol');
+
+  function loadTrack(index) {
+    currentIndex = index;
+    var track = playlist[index];
+    audio.src = track.url;
+    titleEl.textContent = track.name;
+    if (state.time && index === state.index) {
+      audio.currentTime = state.time;
+      state.time = 0;
+    }
+    audio.load();
+  }
+
+  function play() {
+    var p = audio.play();
+    if (p && p.catch) p.catch(function(err){ console.log('Audio play failed:', err.message); });
+    btn.classList.add('playing');
+    playBtn.textContent = '⏸';
+  }
+
+  function pause() {
+    audio.pause();
+    btn.classList.remove('playing');
+    playBtn.textContent = '▶';
+  }
+
+  // 事件
+  btn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    popup.classList.toggle('open');
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!popup.contains(e.target) && e.target !== btn) {
+      popup.classList.remove('open');
+    }
+  });
+
+  playBtn.addEventListener('click', function() {
+    if (!audio.src) loadTrack(currentIndex);
+    if (audio.paused) play(); else pause();
+  });
+
+  popup.querySelector('#pp-prev').addEventListener('click', function() {
+    var idx = (currentIndex - 1 + playlist.length) % playlist.length;
+    loadTrack(idx);
+    play();
+  });
+
+  popup.querySelector('#pp-next').addEventListener('click', function() {
+    var idx = (currentIndex + 1) % playlist.length;
+    loadTrack(idx);
+    play();
+  });
+
+  audio.addEventListener('timeupdate', function() {
+    if (audio.duration && isFinite(audio.duration)) {
+      progressEl.value = (audio.currentTime / audio.duration) * 100;
+    }
+    saveState();
+  });
+
+  audio.addEventListener('ended', function() {
+    var idx = (currentIndex + 1) % playlist.length;
+    loadTrack(idx);
+    play();
+  });
+
+  audio.addEventListener('loadedmetadata', function() {
+    if (audio.duration && isFinite(audio.duration)) {
+      progressEl.max = 100;
+    }
+  });
+
+  progressEl.addEventListener('input', function() {
+    if (audio.duration && isFinite(audio.duration)) {
+      audio.currentTime = (progressEl.value / 100) * audio.duration;
+    }
+  });
+
+  volInput.addEventListener('input', function() {
+    audio.volume = volInput.value / 100;
+    saveState();
+  });
+
+  volInput.value = audio.volume * 100;
+
+  window.addEventListener('beforeunload', function() {
+    saveState();
+  });
+
+  // 打开页面即播放（页面点击导航会传递用户手势，直接刷新时 fallback 到首次交互）
+  loadTrack(currentIndex);
+  var autoPlay = play();
+  if (autoPlay && autoPlay.catch) {
+    autoPlay.catch(function() {
+      // 浏览器阻止了自动播放，等待首次用户交互
+      pause();
+      var resume = function() {
+        play();
+        document.removeEventListener('click', resume);
+        document.removeEventListener('keydown', resume);
+        document.removeEventListener('touchstart', resume);
+      };
+      document.addEventListener('click', resume);
+      document.addEventListener('keydown', resume);
+      document.addEventListener('touchstart', resume);
+    });
+  }
+})(${playlistJson});
+` : '';
+---
+
+{hasAudio && (
+  <div set:html={`<script>${playerJs}</script>`} style="display:none"></div>
+)}
+
+<style is:global>
+  #bg-player-btn {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.55);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    cursor: pointer;
+    z-index: 999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    transition: all 0.2s;
+    color: var(--text);
+    user-select: none;
+  }
+  #bg-player-btn:hover {
+    background: rgba(255,255,255,0.8);
+    border-color: var(--text);
+  }
+  #bg-player-btn.playing {
+    animation: bgp-spin 3s linear infinite;
+    border-color: var(--text);
+  }
+  @keyframes bgp-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  #bg-player-popup {
+    position: fixed;
+    bottom: 5.5rem;
+    right: 1.5rem;
+    width: 260px;
+    background: rgba(255,255,255,0.6);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem;
+    z-index: 999;
+    font-size: 0.85rem;
+    color: var(--text);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    display: none;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  #bg-player-popup.open { display: flex; }
+  #bg-player-popup .pp-title {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #bg-player-popup .pp-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  #bg-player-popup .pp-controls button {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.25rem 0.6rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--text);
+    transition: all 0.15s;
+    line-height: 1;
+  }
+  #bg-player-popup .pp-controls button:hover {
+    background: var(--hover);
+    border-color: var(--text);
+  }
+  #bg-player-popup .pp-progress {
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    cursor: pointer;
+    appearance: none;
+    outline: none;
+  }
+  #bg-player-popup .pp-progress::-webkit-slider-thumb {
+    appearance: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--text);
+    cursor: pointer;
+  }
+  #bg-player-popup .pp-vol {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  #bg-player-popup .pp-vol input {
+    flex: 1;
+    height: 3px;
+    appearance: none;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+  }
+  #bg-player-popup .pp-vol input::-webkit-slider-thumb {
+    appearance: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--text);
+    cursor: pointer;
+  }
+</style>

@@ -3,7 +3,7 @@ title: "如何使用 Astro 搭建个人博客"
 description: "从零开始，一步步搭建一个支持分类、标签、搜索、评论的现代个人博客。"
 date: 2026-07-09
 tags: ["Astro", "博客", "教程"]
-categories: ["技术", "前端", "Astro"]
+draft: false
 ---
 
 ## 为什么选择 Astro

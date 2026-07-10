@@ -25,7 +25,6 @@ const hasAudio = playlist.length > 0;
         var SAVE_THROTTLE = 800; // 最多每 800ms 写一次 localStorage
 
         var audio = new Audio();
-        audio.muted = true;
         audio.loop = false;
         audio.volume = 0.5;
         audio.preload = 'auto';
@@ -129,8 +128,7 @@ const hasAudio = playlist.length > 0;
         });
 
         // ---- 自动播放 & 浏览器策略应对 ----
-        // 策略：直接静音启动（绕过浏览器有声自动播放限制），用户交互后取消静音
-        var isMuted = false;
+        var isMuted = false;  // 因浏览器策略被迫静音
 
         function updateMuteUI() {
           if (isMuted) {
@@ -142,25 +140,67 @@ const hasAudio = playlist.length > 0;
           }
         }
 
-        function doUnmute() {
-          if (!isMuted) return;
-          isMuted = false;
+        // 尝试恢复音量（由用户交互触发）
+        var unmutePending = false;
+        function tryUnmute() {
+          if (!isMuted || !unmutePending) return;
+          unmutePending = false;
+          // 恢复保存的音量
           audio.muted = false;
           audio.volume = state.volume;
           volInput.value = audio.volume * 100;
+          isMuted = false;
           updateMuteUI();
           saveState();
         }
 
-        // 用户交互 → 取消静音 + 清理监听
+        function tryPlay() {
+          var p = audio.play();
+          if (p && p.then) {
+            p.then(function() {
+              // 播放成功
+              setUI(true);
+              state.playing = true;
+              saveState();
+            }).catch(function(err) {
+              if (err.name === 'NotAllowedError') {
+                // 浏览器阻止有声播放 → 立刻尝试静音播放
+                audio.muted = true;
+                audio.volume = 1.0; // 静音时无所谓音量，但保持可调
+                isMuted = true;
+                unmutePending = true;
+                updateMuteUI();
+
+                var p2 = audio.play();
+                if (p2 && p2.then) {
+                  p2.then(function() {
+                    // 静音播放成功！
+                    setUI(true);
+                    state.playing = true;
+                    saveState();
+                    // 注册一次性恢复音量的监听
+                    setupUnmuteListeners();
+                  }).catch(function() {
+                    // 连静音都不行，等用户交互
+                    setUI(false);
+                    state.playing = false;
+                    saveState();
+                    setupFallbackListeners();
+                  });
+                }
+              } else {
+                setUI(false);
+                state.playing = false;
+                saveState();
+              }
+            });
+          }
+        }
+
+        // 用户首次交互 → 取消静音
         function setupUnmuteListeners() {
-          function onInteract(e) {
-            // 如果用户点了播放器按钮，让按钮自己处理，这里只负责取消静音
-            if (e.target.closest('#bg-player-btn') || e.target.closest('#bg-player-popup')) {
-              doUnmute();
-            } else {
-              doUnmute();
-            }
+          function onInteract() {
+            tryUnmute();
             document.removeEventListener('click', onInteract);
             document.removeEventListener('keydown', onInteract);
             document.removeEventListener('touchstart', onInteract);
@@ -170,37 +210,15 @@ const hasAudio = playlist.length > 0;
           document.addEventListener('touchstart', onInteract);
         }
 
-        function tryPlay(isAutoStart) {
-          // 自动播放时静音启动绕过浏览器限制
-          if (isAutoStart) {
-            audio.muted = true;
-            isMuted = true;
-            updateMuteUI();
-          } else {
-            // 手动操作时顺势取消静音
-            if (isMuted) doUnmute();
-          }
-
-          var p = audio.play();
-          if (p && p.then) {
-            p.then(function() {
-              setUI(true);
-              state.playing = true;
-              saveState();
-              if (isMuted) setupUnmuteListeners();
-            }).catch(function() {
-              setUI(false);
-              state.playing = false;
-              saveState();
-              if (isAutoStart) setupFallbackListeners();
-            });
-          }
-        }
-
         // 连静音播放都被阻止 → 等交互后从零开始
         function setupFallbackListeners() {
           function resume() {
-            doUnmute();
+            audio.muted = false;
+            audio.volume = state.volume;
+            volInput.value = audio.volume * 100;
+            isMuted = false;
+            unmutePending = false;
+            updateMuteUI();
             audio.play().then(function() {
               setUI(true);
               state.playing = true;
@@ -209,6 +227,8 @@ const hasAudio = playlist.length > 0;
             document.removeEventListener('click', resume);
             document.removeEventListener('keydown', resume);
             document.removeEventListener('touchstart', resume);
+            // 同时清理 unmute 监听
+            tryUnmute();
           }
           document.addEventListener('click', resume);
           document.addEventListener('keydown', resume);
@@ -226,7 +246,7 @@ const hasAudio = playlist.length > 0;
         audio.addEventListener('ended', function() {
           currentIndex = (currentIndex + 1) % playlist.length;
           loadTrack(currentIndex, 0);
-          tryPlay(true);
+          tryPlay();
         });
 
         audio.addEventListener('pause', function() {
@@ -254,8 +274,8 @@ const hasAudio = playlist.length > 0;
         playBtn.addEventListener('click', function() {
           if (!audio.src) loadTrack(currentIndex, 0);
           if (audio.paused) {
-            // 如果处于静音状态，播放时取消静音
-            if (isMuted) doUnmute();
+            // 如果处于静音状态，播放时尝试恢复音量
+            if (isMuted) tryUnmute();
             tryPlay();
           } else {
             audio.pause();
@@ -292,7 +312,10 @@ const hasAudio = playlist.length > 0;
           state.volume = v;
           if (isMuted) {
             // 用户主动调音量 → 顺势取消静音
-            doUnmute();
+            isMuted = false;
+            unmutePending = false;
+            audio.muted = false;
+            updateMuteUI();
           }
           audio.volume = v;
           saveState();
@@ -327,7 +350,7 @@ const hasAudio = playlist.length > 0;
         // ---- 启动 ----
         loadTrack(currentIndex, state.time);
         if (state.playing) {
-          tryPlay(true);
+          tryPlay();
         } else {
           setUI(false);
         }

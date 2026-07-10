@@ -116,7 +116,7 @@ const hasAudio = playlist.length > 0;
           titleEl.textContent = t.name;
           pendingSeek = seekTime || 0;
           progressEl.value = 0;
-          audio.load();
+          // audio.src 赋值已触发加载，无需再调 load()
         }
 
         // metadata 加载完成后 seek 到目标位置
@@ -158,40 +158,33 @@ const hasAudio = playlist.length > 0;
           var p = audio.play();
           if (p && p.then) {
             p.then(function() {
-              // 播放成功
+              // 有声播放成功
               setUI(true);
               state.playing = true;
               saveState();
             }).catch(function(err) {
-              if (err.name === 'NotAllowedError') {
-                // 浏览器阻止有声播放 → 立刻尝试静音播放
-                audio.muted = true;
-                audio.volume = 1.0; // 静音时无所谓音量，但保持可调
-                isMuted = true;
-                unmutePending = true;
-                updateMuteUI();
+              // 任何失败都走静音重试，不依赖具体错误类型
+              audio.muted = true;
+              audio.volume = 1.0;
+              isMuted = true;
+              unmutePending = true;
+              updateMuteUI();
 
-                var p2 = audio.play();
-                if (p2 && p2.then) {
-                  p2.then(function() {
-                    // 静音播放成功！
-                    setUI(true);
-                    state.playing = true;
-                    saveState();
-                    // 注册一次性恢复音量的监听
-                    setupUnmuteListeners();
-                  }).catch(function() {
-                    // 连静音都不行，等用户交互
-                    setUI(false);
-                    state.playing = false;
-                    saveState();
-                    setupFallbackListeners();
-                  });
-                }
-              } else {
-                setUI(false);
-                state.playing = false;
-                saveState();
+              var p2 = audio.play();
+              if (p2 && p2.then) {
+                p2.then(function() {
+                  // 静音播放成功
+                  setUI(true);
+                  state.playing = true;
+                  saveState();
+                  setupUnmuteListeners();
+                }).catch(function() {
+                  // 连静音都不行，等用户交互
+                  setUI(false);
+                  state.playing = false;
+                  saveState();
+                  setupFallbackListeners();
+                });
               }
             });
           }

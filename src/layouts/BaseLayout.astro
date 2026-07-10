@@ -148,9 +148,6 @@ const galleryJson = JSON.stringify(galleryImages);
 
             // 更新 URL
             history.pushState({}, '', url);
-
-            // 为新内容中的链接重新绑定事件
-            document.addEventListener('click', handleClick);
           }).catch(function() {
             // 出错则完整加载
             window.location.href = url;

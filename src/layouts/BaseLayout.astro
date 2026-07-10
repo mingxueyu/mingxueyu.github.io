@@ -62,7 +62,7 @@ const galleryJson = JSON.stringify(galleryImages);
         <a href="/categories">分类</a>
         <a href="/tags">标签</a>
         <a href="/timeline">时间线</a>
-        <a href="/search">搜索</a>
+        <a href="/search" data-full-reload>搜索</a>
         <a href="/about">关于</a>
       </nav>
     </header>
@@ -83,6 +83,87 @@ const galleryJson = JSON.stringify(galleryImages);
         var imgs = JSON.parse(raw);
         var pick = imgs[Math.floor(Math.random() * imgs.length)];
         document.documentElement.style.backgroundImage = 'url(' + pick + ')';
+      })();
+    </script>
+
+    <!-- 极简客户端路由：只替换 <main> 内容，不销毁音频播放器 -->
+    <script is:inline>
+      (function() {
+        if (!window.history || !window.history.pushState) return;
+
+        function isInternal(href) {
+          return href && href.startsWith('/') && !href.startsWith('//');
+        }
+
+        // 处理导航链接点击
+        function handleClick(e) {
+          var a = e.target.closest('a');
+          if (!a) return;
+
+          // 完整重载标记（搜索页等需要初始化 JS 的页面）
+          if (a.hasAttribute('data-full-reload')) return;
+
+          var href = a.getAttribute('href');
+          if (!href || !isInternal(href)) return;
+
+          // 不拦截修饰键点击
+          if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+          // 不拦截新窗口打开
+          if (a.target === '_blank') return;
+          // 跳过 RSS 等
+          if (/\.(xml|json|pdf)$/i.test(href)) return;
+
+          e.preventDefault();
+          navigate(href);
+        }
+
+        function navigate(url) {
+          fetch(url).then(function(res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.text();
+          }).then(function(html) {
+            // 用 DOMParser 解析新页面
+            var parser = new DOMParser();
+            var doc = parser.parseFromString(html, 'text/html');
+
+            // 更新标题
+            var newTitle = doc.querySelector('title');
+            if (newTitle) document.title = newTitle.textContent;
+
+            // 更新 <main> 内容
+            var newMain = doc.querySelector('main');
+            var currentMain = document.querySelector('main');
+            if (newMain && currentMain) {
+              currentMain.innerHTML = newMain.innerHTML;
+            }
+
+            // 更新 gallery data（用于背景图）
+            var newBody = doc.querySelector('body');
+            if (newBody) {
+              var newGallery = newBody.getAttribute('data-gallery');
+              if (newGallery) {
+                document.body.setAttribute('data-gallery', newGallery);
+              }
+            }
+
+            // 更新 URL
+            history.pushState({}, '', url);
+
+            // 为新内容中的链接重新绑定事件
+            document.addEventListener('click', handleClick);
+          }).catch(function() {
+            // 出错则完整加载
+            window.location.href = url;
+          });
+        }
+
+        // 浏览器前进/后退 → 完整重载（简单可靠）
+        window.addEventListener('popstate', function() {
+          window.location.reload();
+        });
+
+        // 委托点击事件
+        document.addEventListener('click', handleClick);
       })();
     </script>
   </body>

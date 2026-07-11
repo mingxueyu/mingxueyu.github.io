@@ -157,6 +157,11 @@ const { postSlug } = Astro.props;
         e.preventDefault();
         const body = textarea.value.trim();
         if (!body) return;
+        if (body.length > 5000) {
+          msg.textContent = "评论不能超过 5000 字";
+          msg.style.color = "red";
+          return;
+        }
 
         msg.textContent = "发表中…";
         const { error } = await supabase.from("comments").insert({

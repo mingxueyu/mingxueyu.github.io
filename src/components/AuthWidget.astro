@@ -28,7 +28,12 @@
     h3.textContent = "✅ 已登录";
     const p = document.createElement("p");
     p.style.cssText = "margin-bottom: 0.75rem;";
-    p.textContent = email;
+    // 仅显示邮箱首字符 + 域名，避免隐私泄露
+    const atIdx = email.indexOf("@");
+    const masked = atIdx > 0
+      ? email[0] + "***" + email.slice(atIdx)
+      : email;
+    p.textContent = masked;
     const btn = document.createElement("button");
     btn.id = "btn-signout";
     btn.style.cssText =

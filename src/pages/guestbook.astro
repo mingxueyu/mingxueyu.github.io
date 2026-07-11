@@ -1,0 +1,12 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import GuestbookWidget from "../components/GuestbookWidget.astro";
+---
+
+<BaseLayout title="留言板" description="留言板 — 留下你想说的话">
+  <h1>📝 留言板</h1>
+  <p style="color: var(--muted); margin-bottom: 1.5rem;">
+    欢迎留言，无需登录，可以自定义昵称。
+  </p>
+  <GuestbookWidget />
+</BaseLayout>

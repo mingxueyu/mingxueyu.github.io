@@ -1,0 +1,284 @@
+---
+// GuestbookWidget.astro — 留言板（客户端渲染，无需登录，可自定义昵称，支持删除自己的留言）
+---
+
+<section id="guestbook">
+  <p style="color: var(--muted);">留言加载中…</p>
+</section>
+
+<script>
+  import { createClient } from "@supabase/supabase-js";
+
+  const supabase = createClient(
+    import.meta.env.PUBLIC_SUPABASE_URL,
+    import.meta.env.PUBLIC_SUPABASE_ANON_KEY
+  );
+
+  const container = document.getElementById("guestbook")!;
+  const LS_KEY = "guestbook_tokens";
+
+  // 从 localStorage 读取已持有的 token 映射：{ messageId: token }
+  function getTokens() {
+    try {
+      return JSON.parse(localStorage.getItem(LS_KEY) || "{}");
+    } catch {
+      return {};
+    }
+  }
+
+  function saveTokens(tokens) {
+    localStorage.setItem(LS_KEY, JSON.stringify(tokens));
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  async function loadMessages() {
+    const { data, error } = await supabase
+      .from("guestbook")
+      .select("id, nickname, body, created_at")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("加载留言失败:", error);
+      return [];
+    }
+    return data || [];
+  }
+
+  async function deleteMessage(msgId, token, delBtn) {
+    delBtn.disabled = true;
+    delBtn.textContent = "…";
+
+    const { data: deleted, error } = await supabase.rpc(
+      "delete_guestbook_msg",
+      { msg_id: msgId, token }
+    );
+
+    if (error) {
+      console.error("删除失败:", error);
+      delBtn.disabled = false;
+      delBtn.textContent = "删除";
+      return false;
+    }
+
+    if (deleted) {
+      const tokens = getTokens();
+      delete tokens[msgId];
+      saveTokens(tokens);
+      return true;
+    }
+    // token 不匹配
+    delBtn.disabled = false;
+    delBtn.textContent = "删除";
+    return false;
+  }
+
+  async function render() {
+    const messages = await loadMessages();
+    const tokens = getTokens();
+
+    container.innerHTML = "";
+
+    // 标题
+    const title = document.createElement("h2");
+    title.style.cssText = "margin-top: 0; margin-bottom: 1.5rem;";
+    title.textContent = `留言板 (${messages.length})`;
+    container.appendChild(title);
+
+    // 留言表单
+    const form = document.createElement("form");
+    form.id = "guestbook-form";
+    form.style.cssText =
+      "margin-bottom: 2rem; padding: 1.25rem; border: 1px solid var(--border); border-radius: 8px;";
+
+    // 昵称行
+    const nickRow = document.createElement("div");
+    nickRow.style.cssText =
+      "display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;";
+
+    const nickLabel = document.createElement("label");
+    nickLabel.textContent = "昵称：";
+    nickLabel.style.cssText =
+      "font-size: 0.9rem; color: var(--muted); white-space: nowrap;";
+
+    const nickInput = document.createElement("input");
+    nickInput.id = "guestbook-nickname";
+    nickInput.type = "text";
+    nickInput.placeholder = "输入你的昵称（选填）";
+    nickInput.maxLength = 50;
+    nickInput.style.cssText =
+      "flex: 1; padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.95rem; font-family: inherit;";
+
+    nickRow.appendChild(nickLabel);
+    nickRow.appendChild(nickInput);
+    form.appendChild(nickRow);
+
+    // 内容文本框
+    const textarea = document.createElement("textarea");
+    textarea.id = "guestbook-body";
+    textarea.rows = 4;
+    textarea.placeholder = "写下你想说的话…";
+    textarea.maxLength = 1000;
+    textarea.required = true;
+    textarea.style.cssText =
+      "width: 100%; padding: 0.75rem; border: 1px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 0.95rem; resize: vertical;";
+
+    form.appendChild(textarea);
+
+    // 按钮行
+    const btnRow = document.createElement("div");
+    btnRow.style.cssText =
+      "display: flex; align-items: center; gap: 0.75rem; margin-top: 0.75rem;";
+
+    const btn = document.createElement("button");
+    btn.type = "submit";
+    btn.style.cssText =
+      "padding: 0.5rem 1.5rem; background: var(--accent); color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 0.95rem; font-family: inherit;";
+    btn.textContent = "发表留言";
+
+    const msg = document.createElement("span");
+    msg.id = "guestbook-msg";
+    msg.style.cssText = "font-size: 0.85rem; color: var(--muted);";
+
+    btnRow.appendChild(btn);
+    btnRow.appendChild(msg);
+    form.appendChild(btnRow);
+    container.appendChild(form);
+
+    // 留言列表
+    if (messages.length === 0) {
+      const empty = document.createElement("p");
+      empty.style.cssText =
+        "color: var(--muted); text-align: center; padding: 2rem 0;";
+      empty.textContent = "还没有留言，来抢沙发吧 🛋️";
+      container.appendChild(empty);
+    } else {
+      const list = document.createElement("div");
+      list.id = "guestbook-list";
+
+      for (const m of messages) {
+        const card = document.createElement("div");
+        card.style.cssText =
+          "padding: 1rem 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem;";
+
+        const content = document.createElement("div");
+        content.style.cssText = "flex: 1; min-width: 0;";
+
+        const meta = document.createElement("div");
+        meta.style.cssText =
+          "font-size: 0.85rem; color: var(--muted); margin-bottom: 0.4rem; display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap;";
+
+        const nameEl = document.createElement("strong");
+        nameEl.style.cssText = "color: var(--text);";
+        nameEl.textContent = m.nickname || "匿名";
+
+        const timeEl = document.createElement("span");
+        timeEl.textContent = new Date(m.created_at).toLocaleDateString(
+          "zh-CN",
+          {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          }
+        );
+
+        meta.appendChild(nameEl);
+        meta.appendChild(timeEl);
+
+        const bodyEl = document.createElement("p");
+        bodyEl.style.cssText =
+          "margin: 0; white-space: pre-wrap; line-height: 1.7;";
+        bodyEl.textContent = m.body;
+
+        content.appendChild(meta);
+        content.appendChild(bodyEl);
+
+        // 删除按钮：仅当前浏览器持有该留言 token 时显示
+        if (tokens[m.id]) {
+          const delBtn = document.createElement("button");
+          delBtn.style.cssText =
+            "flex-shrink: 0; padding: 0.2rem 0.6rem; background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 0.78rem; font-family: inherit;";
+          delBtn.textContent = "删除";
+          delBtn.addEventListener("click", async () => {
+            const ok = await deleteMessage(m.id, tokens[m.id], delBtn);
+            if (ok) await render();
+          });
+          card.appendChild(delBtn);
+        }
+
+        card.appendChild(content);
+        list.appendChild(card);
+      }
+
+      container.appendChild(list);
+    }
+
+    // 绑定表单提交事件
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const body = textarea.value.trim();
+      if (!body) {
+        msg.textContent = "内容不能为空";
+        msg.style.color = "red";
+        return;
+      }
+      if (body.length > 1000) {
+        msg.textContent = "内容不能超过 1000 字";
+        msg.style.color = "red";
+        return;
+      }
+
+      const nickname = nickInput.value.trim() || "匿名";
+      if (nickname.length > 50) {
+        msg.textContent = "昵称不能超过 50 字";
+        msg.style.color = "red";
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = "发表中…";
+      msg.textContent = "";
+      msg.style.color = "";
+
+      // 生成随机 token 用于后续删除
+      const token = crypto.randomUUID();
+
+      const { data: inserted, error } = await supabase
+        .from("guestbook")
+        .insert({ nickname, body, delete_token: token })
+        .select("id")
+        .single();
+
+      if (error) {
+        msg.textContent = `发表失败：${error.message}`;
+        msg.style.color = "red";
+        btn.disabled = false;
+        btn.textContent = "发表留言";
+      } else {
+        // 保存 token 到 localStorage，之后可通过它删除
+        if (inserted?.id) {
+          const tokens = getTokens();
+          tokens[inserted.id] = token;
+          saveTokens(tokens);
+        }
+
+        // 清空表单并刷新
+        textarea.value = "";
+        nickInput.value = "";
+        btn.disabled = false;
+        btn.textContent = "发表留言";
+        msg.textContent = "✅ 留言成功！";
+        msg.style.color = "green";
+        await render();
+      }
+    });
+  }
+
+  render();
+</script>

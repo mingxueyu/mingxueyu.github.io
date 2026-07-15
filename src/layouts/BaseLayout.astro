@@ -62,8 +62,8 @@ const galleryJson = JSON.stringify(galleryImages);
         <a href="/categories">分类</a>
         <a href="/tags">标签</a>
         <a href="/timeline">时间线</a>
-        <a href="/search" data-full-reload>搜索</a>
-        <a href="/guestbook" data-full-reload>留言板</a>
+        <a href="/search">搜索</a>
+        <a href="/guestbook">留言板</a>
         <a href="/about">关于</a>
       </nav>
     </header>
@@ -135,7 +135,47 @@ const galleryJson = JSON.stringify(galleryImages);
             var newMain = doc.querySelector('main');
             var currentMain = document.querySelector('main');
             if (newMain && currentMain) {
+              // 1. 提取新内容中的 <script> 和 <link>（innerHTML 不会执行它们）
+              var incomingScripts = newMain.querySelectorAll('script');
+              var incomingLinks = newMain.querySelectorAll('link');
+
+              // 2. 先设置 innerHTML（脚本不会执行，这正是我们要的）
               currentMain.innerHTML = newMain.innerHTML;
+
+              // 3. 移除 innerHTML 带入的"死"脚本元素
+              var deadScripts = currentMain.querySelectorAll('script');
+              for (var si = 0; si < deadScripts.length; si++) {
+                deadScripts[si].parentNode.removeChild(deadScripts[si]);
+              }
+
+              // 4. 重新创建脚本元素使其执行
+              for (var sj = 0; sj < incomingScripts.length; sj++) {
+                var s = incomingScripts[sj];
+                var script = document.createElement('script');
+                for (var ak = 0; ak < s.attributes.length; ak++) {
+                  var attr = s.attributes[ak];
+                  if (attr.name === 'src' && s.getAttribute('type') === 'module') {
+                    // 模块脚本加 cache-busting 确保重复访问时重新执行
+                    var sep = attr.value.indexOf('?') > -1 ? '&' : '?';
+                    script.setAttribute('src', attr.value + sep + '_spa=' + Date.now());
+                  } else {
+                    script.setAttribute(attr.name, attr.value);
+                  }
+                }
+                script.textContent = s.textContent;
+                currentMain.appendChild(script);
+              }
+
+              // 5. 重新创建 <link> 元素（如 Pagefind CSS）
+              for (var lk = 0; lk < incomingLinks.length; lk++) {
+                var l = incomingLinks[lk];
+                var link = document.createElement('link');
+                for (var al = 0; al < l.attributes.length; al++) {
+                  var la = l.attributes[al];
+                  link.setAttribute(la.name, la.value);
+                }
+                document.head.appendChild(link);
+              }
             }
 
             // 更新 gallery data（用于背景图）

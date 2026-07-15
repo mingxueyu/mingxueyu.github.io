@@ -84,6 +84,7 @@ def publish(msg="更新文章"):
         description = fm.get("description", "")
         date_str = fm.get("date", TODAY)
         tags = fm.get("tags", [])
+        categories = fm.get("categories", [])
         draft = fm.get("draft", "false")
 
         slug = slugify(title)
@@ -95,13 +96,13 @@ title: "{title}"
 description: "{description}"
 date: {date_str}
 tags: {format_tags(tags)}
+categories: {format_tags(categories)}
 draft: {draft}
 ---"""
 
         with open(dest, "w", encoding="utf-8") as f:
             f.write(frontmatter_block + "\n\n" + body.strip() + "\n")
 
-        os.remove(src)
         print(f"✅ {filename} → src/content/blog/{dest_name}")
 
     # 构建

@@ -348,9 +348,13 @@ const server = http.createServer(async (req, res) => {
   const path = url.pathname;
 
   try {
-    // ---- 静态：界面 ----
+    // ---- 静态：界面与 public/ 下的其它资源 ----
     if (req.method === 'GET' && (path === '/' || path === '/index.html')) {
       if (serveFile(res, join(PUBLIC_DIR, 'index.html'))) return;
+    }
+    if (req.method === 'GET' && path !== '/' && !path.startsWith('/api/') && !path.startsWith('/vendor/')) {
+      const full = resolveInside(PUBLIC_DIR, path);
+      if (full && serveFile(res, full)) return;
     }
 
     // ---- 静态：Vditor（从 node_modules 本地提供，离线可用） ----

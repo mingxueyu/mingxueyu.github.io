@@ -13,7 +13,9 @@
     "new": "bash scripts/new-post.sh",
     "publish": "bash scripts/publish.sh",
     "admin": "node admin/server.mjs",
-    "test": "node admin/test/normalize.test.mjs"
+    "test": "node admin/test/normalize.test.mjs",
+    "test:api": "node admin/test/api.test.mjs",
+    "test:ui": "node admin/test/ui.test.mjs"
   },
   "dependencies": {
     "@astrojs/rss": "^4.0.19",

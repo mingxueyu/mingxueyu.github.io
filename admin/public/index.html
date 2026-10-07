@@ -227,7 +227,18 @@
   }
 
   // ------------------------------------------------------ 编辑器
+  //
+  // ⚠️ Vditor 是**异步初始化**的：构造函数返回时内部实例还不存在
+  // （options.after 的注释是"编辑器异步渲染完成后的回调方法"）。
+  // 在 after 触发之前调用 setValue/getValue 会抛
+  //   TypeError: Cannot read properties of undefined (reading 'currentMode')
+  // 因为 currentMode 是在内部 setIR/setWYSIWYG/setSV 里才被赋值的。
+  // 所以这里用 ready 标记 + pendingValue 队列，初始化完成后补设内容。
   var vd = null;
+  var vdReady = false;
+  var vdPendingValue = null;
+  var suppressInput = false;
+
   function initEditor(){
     if (vd) return;
     vd = new Vditor('editor', {
@@ -254,21 +265,48 @@
         markdown: { toc: false, mark: false },
         hljs: { style: 'github', lineNumber: false }
       },
-      input: function(){ markDirty(true); }
+      input: function(){ markDirty(true); },
+      after: function(){
+        vdReady = true;
+        if (vdPendingValue !== null){
+          var v = vdPendingValue;
+          vdPendingValue = null;
+          writeBody(v);
+        }
+      }
     });
+  }
+
+  /** 真正写入正文（仅当编辑器就绪时调用） */
+  function writeBody(md){
+    suppressInput = true;
+    try {
+      vd.setValue(md || '');
+    } catch (e) {
+      suppressInput = false;
+      throw e;
+    }
+    // setValue 会触发 input 回调，用它设的脏标记要清掉
+    setTimeout(function(){ suppressInput = false; markDirty(false); }, 0);
   }
 
   function setBody(md){
     initEditor();
-    vd.setValue(md || '');
-    // setValue 会触发 input，等它稳定后再清掉脏标记由调用方负责
+    if (!vdReady){
+      vdPendingValue = md || '';   // 排队，等 after 回调补设
+      return;
+    }
+    writeBody(md);
   }
 
   function getBody(){
-    return vd ? vd.getValue() : '';
+    // 未就绪时返回排队值，避免读到一个还不存在的实例
+    if (!vd || !vdReady) return vdPendingValue || '';
+    return vd.getValue();
   }
 
   function markDirty(v){
+    if (v && suppressInput) return;   // 程序化写入正文不算"用户改动"
     state.dirty = !!v;
     updateBar();
   }
@@ -426,8 +464,6 @@
       $('welcome').style.display = 'none';
       $('editorArea').style.display = '';
       fillForm(p);
-      // setValue 会触发 input 事件，稍后清掉脏标记
-      setTimeout(function(){ markDirty(false); }, 60);
       renderList();
       updateBar();
     }).catch(function(e){ toast(e.message, 'err'); });
@@ -446,7 +482,7 @@
     $('welcome').style.display = 'none';
     $('editorArea').style.display = '';
     fillForm(p);
-    setTimeout(function(){ markDirty(false); $('fTitle').focus(); }, 60);
+    $('fTitle').focus();
     renderList();
     updateBar();
     toast('已新建，填好标题和正文后点「保存」或「保存并发布」');
@@ -481,7 +517,6 @@
       }).then(function(fresh){
         state.current = fresh;
         fillForm(fresh);
-        setTimeout(function(){ markDirty(false); }, 60);
         renderList(); updateBar();
         toast(
           (r.created ? '已新建 ' : '已保存 ') + r.slug + '.md' +

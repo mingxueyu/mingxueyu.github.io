@@ -76,11 +76,33 @@ npm run admin     # 打开 http://127.0.0.1:4322
    它会遍历 dist 下全部 `js/**` 子资源逐个验证（当前 391 个），
    并检查 zh_CN 语言包与 Lute 引擎的内容正确性。
 
+### 第 4 个坑：Vditor 是异步初始化的
+
+`new Vditor(...)` 返回时**内部实例还没建好**（`options.after` 的类型注释就是
+"编辑器异步渲染完成后的回调方法"）。在 `after` 触发前调用 `setValue` / `getValue`
+会抛：
+
+```
+TypeError: Cannot read properties of undefined (reading 'currentMode')
+```
+
+因为 `currentMode` 只在内部 `setIR`/`setWYSIWYG`/`setSV` 里才被赋值
+（`index.min.js`）。**这个错误不会白屏**，只在界面右下角弹一个 toast，极易漏掉。
+
+所以 `admin/public/index.html` 用 `vdReady` + `vdPendingValue` 队列：
+初始化完成前先排队，`after` 回调里再补写内容；`getBody()` 在未就绪时返回排队值。
+
+`npm run test:ui` 就是为这类"页面能显示但功能是坏的"问题准备的 ——
+它用 headless Chrome 加载真实界面，断言无错误提示、且第一篇文章的正文
+确实出现在渲染结果里。已用变异测试确认：把 `setBody()` 退回旧写法，
+该测试会以同样的 currentMode 报错失败。
+
 ### 测试
 
 ```bash
 npm test                              # 差分测试：JS 与 Python 段落归一化逐字节一致
-node admin/test/api.test.mjs          # 42 项接口/校验/软删除/并发 + Vditor 资源全量校验（需服务在跑）
+npm run test:api                      # 42 项接口/校验/软删除/并发 + Vditor 资源全量校验（需服务在跑）
+npm run test:ui                       # headless Chrome 渲染监管界面（抓异步初始化类错误，需服务在跑）
 node admin/test/publish.test.mjs --real   # 完整发布链路；默认不跑，会真实提交+推送
 ```
 

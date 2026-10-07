@@ -26,6 +26,8 @@ import {
   savePost,
   deletePost,
   listTrash,
+  restoreFromTrash,
+  emptyTrash,
   today,
   HttpError,
 } from './lib/store.mjs';
@@ -411,6 +413,17 @@ const server = http.createServer(async (req, res) => {
 
     if (path === '/api/trash' && req.method === 'GET') {
       return sendJson(res, 200, { items: listTrash() });
+    }
+
+    // 从回收站恢复（误删后的一键撤销）
+    if (path === '/api/trash/restore' && req.method === 'POST') {
+      const body = await readBody(req);
+      return sendJson(res, 200, restoreFromTrash(body.when, body.file));
+    }
+
+    // 彻底清空回收站
+    if (path === '/api/trash' && req.method === 'DELETE') {
+      return sendJson(res, 200, emptyTrash());
     }
 
     if (path === '/api/publish' && req.method === 'POST') {

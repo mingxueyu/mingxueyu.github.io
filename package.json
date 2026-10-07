@@ -15,7 +15,8 @@
     "admin": "node admin/server.mjs",
     "test": "node admin/test/normalize.test.mjs",
     "test:api": "node admin/test/api.test.mjs",
-    "test:ui": "node admin/test/ui.test.mjs"
+    "test:ui": "node admin/test/ui.test.mjs",
+    "sync": "node scripts/sync.mjs"
   },
   "dependencies": {
     "@astrojs/rss": "^4.0.19",

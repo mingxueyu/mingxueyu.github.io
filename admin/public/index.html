@@ -124,6 +124,7 @@
     <div id="bar">
       <span class="fname" id="fname">未选择文章</span>
       <span class="grow"></span>
+      <button class="btn" id="trashBtn" title="恢复被删除的文章">回收站</button>
       <button class="btn" id="devBtn">本地预览</button>
       <button class="btn danger" id="delBtn" disabled>删除</button>
       <button class="btn" id="saveBtn" disabled>保存</button>
@@ -210,6 +211,27 @@
     t.className = 'show ' + (kind || '');
     clearTimeout(t._t);
     t._t = setTimeout(function(){ t.className = ''; }, kind === 'err' ? 6000 : 2800);
+  }
+
+  /** 带一个操作按钮的提示（用于"已删除 → 撤销"） */
+  function toastAction(msg, actionLabel, onAction){
+    var t = $('toast');
+    t.textContent = '';
+    var span = document.createElement('span');
+    span.textContent = msg + '　';
+    var btn = document.createElement('button');
+    btn.textContent = actionLabel;
+    btn.style.cssText = 'background:#fff;color:#1c1c1c;border:none;border-radius:4px;padding:3px 10px;font-size:12px;cursor:pointer;font-weight:600';
+    btn.onclick = function(){
+      t.className = '';
+      clearTimeout(t._t);
+      onAction();
+    };
+    t.appendChild(span);
+    t.appendChild(btn);
+    t.className = 'show ok';
+    clearTimeout(t._t);
+    t._t = setTimeout(function(){ t.className = ''; t.textContent = ''; }, 8000);
   }
 
   function api(path, opts){
@@ -545,8 +567,54 @@
       markDirty(false);
       return refresh().then(function(){
         renderList(); updateBar();
-        toast('已移入回收站：' + r.trash, 'ok');
+        // 提供"撤销"，避免误点删除后还要手工去翻 .trash 目录
+        toastAction('已移入回收站', '撤销', function(){
+          api('/api/trash/restore', { method: 'POST', body: { when: r.when, file: r.file } })
+            .then(function(res){
+              return refresh().then(function(){
+                renderList();
+                toast('已恢复 ' + res.slug + '.md', 'ok');
+                openPost(res.slug);
+              });
+            })
+            .catch(function(e){ toast(e.message, 'err'); });
+        });
       });
+    }).catch(function(e){ toast(e.message, 'err'); });
+  }
+
+  // ------------------------------------------------------ 回收站
+  function showTrash(){
+    api('/api/trash').then(function(d){
+      var items = d.items || [];
+      if (!items.length){ toast('回收站是空的'); return; }
+      var lines = items.map(function(it, i){
+        return (i + 1) + '. ' + it.title + '  （' + (it.date || '无日期') + '，' + it.bytes + ' 字节）';
+      }).join('\n');
+      var ans = prompt(
+        '回收站（共 ' + items.length + ' 篇）：\n\n' + lines +
+        '\n\n输入序号恢复该文章；输入 all 全部恢复；留空取消。',
+        ''
+      );
+      if (ans === null || ans.trim() === '') return;
+      var v = ans.trim().toLowerCase();
+      var picked = v === 'all' ? items : [items[Number(v) - 1]].filter(Boolean);
+      if (!picked.length){ toast('序号无效', 'err'); return; }
+
+      var chain = Promise.resolve();
+      var okList = [];
+      picked.forEach(function(it){
+        chain = chain.then(function(){
+          return api('/api/trash/restore', { method: 'POST', body: { when: it.when, file: it.file } })
+            .then(function(res){ okList.push(res.renamed ? res.slug + '.md（已改名，避免覆盖）' : res.slug + '.md'); });
+        });
+      });
+      chain.then(function(){
+        return refresh().then(function(){
+          renderList();
+          toast('已恢复 ' + okList.length + ' 篇：' + okList.join('、'), 'ok');
+        });
+      }).catch(function(e){ toast(e.message, 'err'); });
     }).catch(function(e){ toast(e.message, 'err'); });
   }
 
@@ -634,6 +702,7 @@
   $('delBtn').onclick = remove;
   $('pubBtn').onclick = publish;
   $('devBtn').onclick = toggleDev;
+  $('trashBtn').onclick = showTrash;
 
   // ------------------------------------------------------ 启动
   refresh().then(function(){

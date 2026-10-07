@@ -13,6 +13,7 @@ import {
   mkdirSync,
   statSync,
   existsSync,
+  rmSync,
 } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -285,15 +286,21 @@ export function savePost(input) {
   return { slug, created, normalized, mtime: Math.round(st.mtimeMs) };
 }
 
-/** 软删除：移动到 admin/.trash/<时间戳>/ */
+/** 软删除：移动到 admin/.trash/<时间戳>/；返回的信息足够界面做"撤销恢复" */
 export function deletePost(slug) {
   const full = fileOf(slug);
   if (!existsSync(full)) throw new HttpError(404, `找不到文章：${slug}`);
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const dir = join(TRASH_DIR, stamp);
   mkdirSync(dir, { recursive: true });
-  renameSync(full, join(dir, safeSlug(slug) + '.md'));
-  return { slug: safeSlug(slug), trash: `admin/.trash/${stamp}/${slug}.md` };
+  const file = safeSlug(slug) + '.md';
+  renameSync(full, join(dir, file));
+  return {
+    slug: safeSlug(slug),
+    when: stamp,
+    file,
+    trash: `admin/.trash/${stamp}/${file}`,
+  };
 }
 
 /** 回收站内容（便于恢复） */
@@ -302,11 +309,83 @@ export function listTrash() {
   const out = [];
   for (const dir of readdirSync(TRASH_DIR)) {
     const d = join(TRASH_DIR, dir);
+    let files = [];
     try {
-      for (const f of readdirSync(d)) {
-        out.push({ when: dir, file: f, path: `admin/.trash/${dir}/${f}` });
-      }
-    } catch {}
+      files = readdirSync(d);
+    } catch {
+      continue;
+    }
+    for (const f of files) {
+      if (!f.endsWith('.md')) continue;
+      const full = join(d, f);
+      let title = f.slice(0, -3);
+      let date = '';
+      try {
+        const { fm } = parseFrontmatter(readFileSync(full, 'utf8'));
+        if (fm.title) title = fm.title;
+        date = fm.date || '';
+      } catch {}
+      out.push({
+        when: dir,
+        file: f,
+        slug: f.slice(0, -3),
+        title,
+        date,
+        bytes: statSync(full).size,
+        path: `admin/.trash/${dir}/${f}`,
+      });
+    }
   }
   return out.sort((a, b) => b.when.localeCompare(a.when));
+}
+
+/**
+ * 从回收站恢复一篇文章。
+ * 若目标文件名已存在则不覆盖，改名为 <slug>-恢复-<时间>.md，避免冲掉现有文章。
+ * @param {string} when 回收站目录名（时间戳）
+ * @param {string} file 文件名（含 .md）
+ */
+export function restoreFromTrash(when, file) {
+  const stamp = String(when ?? '');
+  if (!stamp || /[/\\]|\.\./.test(stamp)) throw new HttpError(400, '非法的回收站条目');
+  const name = safeSlug(String(file ?? '').replace(/\.md$/i, '')) + '.md';
+  const from = join(TRASH_DIR, stamp, name);
+  if (!existsSync(from)) throw new HttpError(404, '回收站里找不到这篇文章');
+
+  const base = name.slice(0, -3);
+  let target = base;
+  let renamed = false;
+  if (existsSync(fileOf(target))) {
+    // 不覆盖同名文章：改名保留两份，交由作者自己取舍
+    target = `${base}-恢复-${Date.now()}`;
+    renamed = true;
+  }
+
+  const text = readFileSync(from, 'utf8');
+  if (!existsSync(BLOG_DIR)) mkdirSync(BLOG_DIR, { recursive: true });
+  writeFileSync(fileOf(target), text, 'utf8');
+
+  // 校验落盘内容确实一致，才删除回收站副本（避免恢复失败却丢了备份）
+  if (readFileSync(fileOf(target), 'utf8') === text) {
+    try {
+      rmSync(from, { force: true });
+      const d = join(TRASH_DIR, stamp);
+      if (readdirSync(d).length === 0) rmSync(d, { recursive: true, force: true });
+    } catch {}
+  }
+
+  return { slug: target, renamed, from: `admin/.trash/${stamp}/${name}` };
+}
+
+/** 彻底清空回收站（不可恢复） */
+export function emptyTrash() {
+  if (!existsSync(TRASH_DIR)) return { removed: 0 };
+  let n = 0;
+  for (const dir of readdirSync(TRASH_DIR)) {
+    try {
+      rmSync(join(TRASH_DIR, dir), { recursive: true, force: true });
+      n++;
+    } catch {}
+  }
+  return { removed: n };
 }

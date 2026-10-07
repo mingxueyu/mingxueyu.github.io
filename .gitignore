@@ -14,6 +14,7 @@ __pycache__/
 admin/.trash/
 admin/.cases.json
 admin/.py-out.json
+admin/.chrome-profile/
 
 # 临时文件（提交信息草稿等）
 _cm*.txt

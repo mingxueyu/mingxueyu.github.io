@@ -15,6 +15,10 @@ admin/.trash/
 admin/.cases.json
 admin/.py-out.json
 
+# 临时文件（提交信息草稿等）
+_cm*.txt
+_msg*.txt
+
 # logs
 npm-debug.log*
 yarn-debug.log*

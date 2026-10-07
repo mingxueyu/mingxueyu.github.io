@@ -35,6 +35,46 @@ def extract_frontmatter(text):
     return fm, parts[2].strip()
 
 
+def normalize_paragraphs(body):
+    """把"单换行"的行间隔转换为空行，使每行渲染为独立 <p>。
+
+    背景：用 Obsidian 写中文时习惯一行一段、行间只敲一个回车。CommonMark 会把
+    连续行合并进同一个 <p>（连 <br> 都不生成），于是整篇被塞进一个段落，
+    CSS 的 text-indent: 2em 首行缩进与段间距全部失效。
+
+    判定规则（两条），只在明确是"段落边界"时插入空行：
+      A. 上一行以句末标点（。！？…）结尾 —— 下一行无论以什么字符开头，都另起一段；
+      B. 上一行以 CJK 文字/标点（非句末标点）结尾 —— 仅当下一行以 CJK 文字/标点
+         开头时另起一段。
+
+    规则 B 的限定条件很关键：它让"上一行在句子中间被换行折断"的情况
+    （下一行以 ASCII 单词或数字开头）保持为同一段，避免把一句话切碎。
+    列表、引用、表格、代码块均以 ASCII 字符开头，因此不会被改动。
+    """
+    CJK = "\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff"
+    PUNCT = "\uff0c\u3002\uff01\uff1f\uff1b\uff1a\u3001\u2026\u2014\u00b7"
+    CLOSER = "\u300d\u300f\u3011\u300b\uff09\u3009\u201d\u2019\"']"
+    # 句末标点：。！？…
+    ENDER = "\u3002\uff01\uff1f\u2026"
+    TAIL_ANY = "[" + CJK + PUNCT + CLOSER + "]"
+    TAIL_CJK = "[" + CJK + PUNCT + "\u300c\u300e\u3010\u300a\uff08\u3008\u201c\u2018]"
+    HEAD_CJK = "[" + CJK + PUNCT + "\u300c\u300e\u3010\u300a\uff08\u3008\u201c\u2018]"
+
+    # 规则 A：句末标点（后面可跟收尾引号/括号）
+    body = re.sub(
+        "(" + ENDER + "[" + CLOSER + "]{0,3})([ \t]*)\n(?!\n)",
+        "\\1\\2\n\n",
+        body,
+    )
+    # 规则 B：CJK 结尾（非句末标点）且下一行以 CJK 开头
+    body = re.sub(
+        "(" + TAIL_CJK + ")([ \t]*)\n(?!\n)(?=[ \t]*" + HEAD_CJK + ")",
+        "\\1\\2\n\n",
+        body,
+    )
+    return body
+
+
 def slugify(title):
     """标题 → 文件名"""
     s = title.lower().strip()
@@ -83,6 +123,7 @@ def publish(msg="更新文章"):
         title = fm.get("title", os.path.splitext(filename)[0])
         description = fm.get("description", "")
         date_str = fm.get("date", TODAY)
+        updated = fm.get("updated", "")
         tags = fm.get("tags", [])
         categories = fm.get("categories", [])
         draft = fm.get("draft", "false")
@@ -90,6 +131,12 @@ def publish(msg="更新文章"):
         slug = slugify(title)
         dest_name = f"{slug}.md"
         dest = os.path.join(CONTENT_DIR, dest_name)
+
+        # 段落归一化：单换行 → 空行，避免整篇被合并成一个 <p>
+        original_body = body
+        body = normalize_paragraphs(body)
+        if body != original_body:
+            print(f"   ↳ 段落归一化：已把单换行转换为空行（{filename}）")
 
         frontmatter_block = f"""---
 title: "{title}"
@@ -100,6 +147,12 @@ categories: {format_tags(categories)}
 draft: {draft}
 ---"""
 
+        # updated 字段保持原样写入（缺失则完全不输出该行）
+        if updated:
+            frontmatter_block = frontmatter_block.replace(
+                f"date: {date_str}\n", f"date: {date_str}\nupdated: {updated}\n"
+            )
+
         with open(dest, "w", encoding="utf-8") as f:
             f.write(frontmatter_block + "\n\n" + body.strip() + "\n")
 
@@ -107,7 +160,8 @@ draft: {draft}
 
     # 构建
     print("\n📦 构建中…")
-    result = subprocess.run("npx astro build", cwd=ROOT, capture_output=True, text=True, shell=True, encoding="utf-8")
+    # 用 npm run build（astro build + pagefind），保证本地也生成搜索索引
+    result = subprocess.run("npm run build", cwd=ROOT, capture_output=True, text=True, shell=True, encoding="utf-8")
     if result.returncode != 0:
         print("❌ 构建失败")
         print(result.stderr)

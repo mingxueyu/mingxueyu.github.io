@@ -457,6 +457,21 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+// 端口被占用时给出可操作的提示，而不是抛一段 EADDRINUSE 堆栈。
+// 常见情况：用户双击了两次快捷方式 —— 那直接用已经跑着的那个就好。
+server.on('error', (e) => {
+  if (e.code === 'EADDRINUSE') {
+    console.error('');
+    console.error(`  ✗ 端口 ${PORT} 已被占用，管理服务应该已经在运行。`);
+    console.error(`    直接打开：http://${HOST}:${PORT}`);
+    console.error(`    若想换个端口：npm run admin -- --port 4400`);
+    console.error('');
+    process.exit(2);
+  }
+  console.error(e);
+  process.exit(1);
+});
+
 server.listen(PORT, HOST, () => {
   const url = `http://${HOST}:${PORT}`;
   console.log('');

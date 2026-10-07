@@ -13,6 +13,8 @@
     "new": "bash scripts/new-post.sh",
     "publish": "bash scripts/publish.sh",
     "admin": "node admin/server.mjs",
+    "start": "node scripts/launch-admin.mjs",
+    "shortcut": "node scripts/make-shortcut.mjs",
     "test": "node admin/test/normalize.test.mjs",
     "test:api": "node admin/test/api.test.mjs",
     "test:ui": "node admin/test/ui.test.mjs",

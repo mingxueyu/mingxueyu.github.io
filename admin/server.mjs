@@ -239,10 +239,12 @@ function startPublish(message) {
   };
   const msg = String(message || '').trim() || '更新文章';
 
+  // note 里以"（"开头的说明是纯附加信息，不套用"刷新 treefish.top"的尾句
   const finish = (ok, note) => {
     const secs = ((Date.now() - started) / 1000).toFixed(1);
     if (ok) {
-      emit(`\n✅ ${note || '发布完成'}，用时 ${secs}s。1–2 分钟后刷新 treefish.top 即可看到。\n`);
+      const tail = note && note.startsWith('（') ? '' : '。1–2 分钟后刷新 treefish.top 即可看到';
+      emit(`\n✅ ${note || '发布完成'}，用时 ${secs}s${tail}\n`);
     } else {
       emit(`\n❌ 发布中断：${note}（用时 ${secs}s）\n`);
     }
@@ -258,13 +260,15 @@ function startPublish(message) {
 
     const staged = await runCapture('git', [...NO_PROXY_GIT, 'diff', '--cached', '--quiet']);
     const hasChanges = staged.code !== 0; // --quiet 有差异时返回 1
+    let pushedOnly = false;
     if (!hasChanges) {
       emit('  没有需要提交的改动（文章内容与上次发布一致）。\n');
       const ahead = await runCapture('git', [...NO_PROXY_GIT, 'rev-list', '--count', 'origin/main..HEAD']);
       if (Number(ahead.out.trim()) === 0) {
-        return finish(true, '没有改动，且远端已是最新，无需发布');
+        return finish(true, '没有改动，且远端已是最新，无需发布（未做任何变更）');
       }
-      emit('  但有尚未推送的提交，继续推送。\n');
+      emit(`  但有 ${ahead.out.trim()} 个尚未推送的提交，继续推送。\n`);
+      pushedOnly = true;
     } else {
       // 2) 提交
       emit('\n$ git commit\n');
@@ -289,7 +293,7 @@ function startPublish(message) {
     );
     if (!pushed.ok) return finish(false, '推送失败（检查网络/代理）');
 
-    finish(true, '发布完成');
+    finish(true, pushedOnly ? '已把待推送的提交推送上线' : '发布完成');
   })().catch((e) => finish(false, e.message));
 }
 

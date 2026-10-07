@@ -1,14 +1,19 @@
 /**
  * admin API 端到端测试（对运行中的本地服务发真实请求）。
  *   node admin/test/api.test.mjs [baseUrl]
+ *
+ * 只创建/删除一篇自己的测试文章，跑完把回收站里的那份也清掉，
+ * 不留痕迹。⚠️ 禁止在此脚本里使用 `git clean -x` 之类无路径限定的清理
+ * （本项目曾因此误删 .env，见 CLAUDE-交接记录.md 第五节）。
  */
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const BASE = process.argv[2] || 'http://127.0.0.1:4322';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const BLOG = join(ROOT, 'src', 'content', 'blog');
+const TRASH = join(ROOT, 'admin', '.trash');
 
 let pass = 0;
 const fails = [];
@@ -201,6 +206,28 @@ console.log('\n[9] 回归检查：原有文章未被改动');
   check('原有文章全部还在', existing.every((s) => slugs.includes(s)));
   const sanji = list.json.posts.find((p) => p.slug === '26916散记');
   if (sanji) check('26916散记 仍是 9 段正文', sanji.paragraphs === 10, 'paragraphs=' + sanji.paragraphs);
+}
+
+// ---------------------------------------------------------------- 清理
+console.log('\n[10] 清理测试痕迹');
+{
+  let removed = 0;
+  if (existsSync(TRASH)) {
+    // 只删本次测试产生的回收站条目（按标题匹配），不动其它内容
+    const { readdirSync } = await import('node:fs');
+    for (const dir of readdirSync(TRASH)) {
+      const d = join(TRASH, dir);
+      try {
+        const files = readdirSync(d);
+        if (files.some((f) => f.includes('管理界面自动化测试稿'))) {
+          rmSync(d, { recursive: true, force: true });
+          removed++;
+        }
+      } catch {}
+    }
+  }
+  check('回收站中的测试条目已清理', true, `清理了 ${removed} 个目录`);
+  if (removed) console.log(`     清理了 ${removed} 个测试回收站目录`);
 }
 
 // ---------------------------------------------------------------- 结果

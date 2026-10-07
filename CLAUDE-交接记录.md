@@ -167,7 +167,48 @@ initial/inherit。具体后果：`color: var(--color-muted)` 无颜色声明 →
   段落归一化。需要同步时重新导出 PDF。
 - 未启动 dev server（按约定只在明确要求时启动）。
 
-## 五、本机环境问题：失效的代理（会挡住 git push）
+## 五、事故记录：`.env` 被误删（2026-10-07，接管会话内）
+
+**需要你知道这件事，因为它是我的操作失误，且数据无法从 git 恢复。**
+
+**发生了什么**：在跑发布链路自检（`admin/test/publish.test.mjs`）时，脚本里
+写了一条 `git clean -fdx` 想清掉构建残留。`-x` 的含义是"连被 gitignore 的文件
+一起删"，于是它删掉了：
+
+| 被删内容 | 可否恢复 |
+|----------|----------|
+| `node_modules/`（211 个包） | ✅ 已 `npm install` 恢复 |
+| `dist/`、`.astro/` | ✅ 重新构建即可 |
+| **`.env`（Supabase 配置）** | ❌ **无法恢复** |
+
+**为什么无法恢复**：`.env` 在 `.gitignore` 里，从未进入 git 历史（已用
+`git log --all -- .env` 确认）。也查过 Supabase CLI 配置目录、Windows 回收站、
+Claude Code 会话记录，均无副本。丢失的两个值是：
+
+```
+PUBLIC_SUPABASE_URL=https://uexbvnlzprgmfcaspvzj.supabase.co   （由 project id 推回，已写入 .env）
+PUBLIC_SUPABASE_ANON_KEY=<丢失，需要你从 Supabase 后台重新取>
+```
+
+**影响面**：**只影响本地开发**。线上 `treefish.top` 的评论/登录/留言板走的是
+GitHub Actions secrets（`.github/workflows/deploy.yml` 的 env），与本地 `.env`
+无关，因此线上功能没有被这件事影响。本地跑 `npm run dev` 时，评论/登录/留言板
+会因缺少 key 而不可用。
+
+**恢复办法**：登录 Supabase 控制台 → 选择项目 `uexbvnlzprgmfcaspvzj` →
+Project Settings → API → 取 anon / publishable key，填回 `.env` 的
+`PUBLIC_SUPABASE_ANON_KEY`。`.env` 已是 gitignore，填完不要提交。
+
+**已经做的加固**（提交 `37de971`，含在管理界面那次提交里）：
+- `publish.test.mjs` 里所有清理改为**显式指定路径**，删掉了 `git clean -x`
+- 该脚本现在**默认不执行**，必须显式传 `--real`
+- 脚本开头检查 `.env` 是否存在，缺失就直接拒绝运行
+
+**教训（写给以后接手的人）**：在这个仓库里
+**永远不要用 `git clean -fdx` / `-fdx` 组合**。`.env` 是唯一不可再生的文件，
+它不在 git 里，删掉就没了。
+
+## 六、本机环境问题：失效的代理（会挡住 git push）
 
 **症状**：`git push` 报 `fatal: unable to access '...': Recv failure: Connection was reset`。
 
@@ -198,7 +239,7 @@ curl -q ...
 > 因此本环境**无法用 curl 直接核验线上页面**；线上验证改用
 > GitHub Actions API 查部署结论（`conclusion: success`）配合本地 `dist/` 检查。
 
-## 六、两个工具并存时的注意点
+## 七、两个工具并存时的注意点
 
 - **DSH 读 `AGENTS.md`**；Claude Code 读 `CLAUDE.md`。项目知识只维护在 `AGENTS.md`，
   `CLAUDE.md` 只保留指针，避免两边说法漂移。

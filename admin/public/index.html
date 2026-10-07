@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文章管理 — treefish</title>
+<link rel="stylesheet" href="/vendor/vditor/index.css">
+<style>
+  :root{
+    --bg:#fff; --text:#1a1a1a; --muted:#6b6b6b; --line:#e8e8e8;
+    --soft:#f6f6f6; --ok:#0a7d32; --warn:#a35a00; --err:#c0392b;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC","Microsoft YaHei",sans-serif;
+    color:var(--text); background:var(--bg); font-size:14px; line-height:1.6;
+  }
+  button{font-family:inherit;font-size:inherit;cursor:pointer}
+  /* ---------- 布局 ---------- */
+  #app{display:flex;height:100vh;overflow:hidden}
+  #side{
+    width:270px;min-width:270px;border-right:1px solid var(--line);
+    display:flex;flex-direction:column;background:#fcfcfc;
+  }
+  #side header{padding:14px 14px 10px}
+  #side h1{margin:0 0 10px;font-size:15px;font-weight:600;letter-spacing:-.01em}
+  #newBtn{width:100%;padding:8px;border:1px solid #000;background:#000;color:#fff;border-radius:5px}
+  #newBtn:hover{opacity:.82}
+  #q{width:100%;margin-top:9px;padding:7px 9px;border:1px solid var(--line);border-radius:5px;font-family:inherit;font-size:13px}
+  #list{flex:1;overflow-y:auto;padding:4px 8px 20px}
+  .item{padding:8px 9px;border-radius:5px;cursor:pointer;margin-bottom:2px}
+  .item:hover{background:var(--soft)}
+  .item.active{background:#eee}
+  .item .t{font-weight:500;display:flex;align-items:center;gap:6px}
+  .item .t span.nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .item .m{color:var(--muted);font-size:12px;margin-top:2px;display:flex;gap:7px;flex-wrap:wrap}
+  .draft-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--warn);flex:0 0 auto}
+  .empty{color:var(--muted);padding:20px 6px;text-align:center;font-size:13px}
+  /* ---------- 主区 ---------- */
+  #main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+  #bar{
+    display:flex;align-items:center;gap:12px;padding:10px 16px;
+    border-bottom:1px solid var(--line);flex-wrap:wrap;
+  }
+  #bar .fname{color:var(--muted);font-size:12px;font-family:ui-monospace,monospace}
+  #bar .grow{flex:1}
+  .btn{padding:7px 14px;border-radius:5px;border:1px solid var(--line);background:#fff}
+  .btn:hover{background:var(--soft)}
+  .btn.primary{background:#000;color:#fff;border-color:#000}
+  .btn.primary:hover{opacity:.82}
+  .btn.danger{color:var(--err);border-color:#f0d0cc}
+  .btn.danger:hover{background:#fdf3f2}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  #scroll{flex:1;overflow-y:auto;padding:16px 16px 60px}
+  /* ---------- 元数据 ---------- */
+  #meta{border:1px solid var(--line);border-radius:7px;padding:14px;margin-bottom:14px;background:#fdfdfd}
+  .row{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+  .row:last-child{margin-bottom:0}
+  .fld{display:flex;flex-direction:column;gap:5px;flex:1;min-width:180px}
+  .fld.narrow{flex:0 0 150px;min-width:150px}
+  .fld label{font-size:12px;color:var(--muted)}
+  .fld input[type=text],.fld input[type=date],.fld textarea{
+    padding:7px 9px;border:1px solid var(--line);border-radius:5px;font-family:inherit;font-size:13px;width:100%;
+  }
+  .fld textarea{resize:vertical;min-height:38px}
+  .chk{display:flex;align-items:center;gap:6px;font-size:13px;padding-top:20px}
+  /* ---------- 标签/分类选择器 ---------- */
+  .picker{border:1px solid var(--line);border-radius:6px;padding:8px;background:#fff}
+  .picked{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:7px;min-height:24px}
+  .picked:empty::after{content:"未选择";color:#bbb;font-size:12px}
+  .chip{
+    display:inline-flex;align-items:center;gap:5px;background:#f0f0f0;
+    border-radius:4px;padding:3px 7px;font-size:12px;
+  }
+  .chip b{font-weight:500}
+  .chip i{cursor:pointer;font-style:normal;color:#999;font-weight:700}
+  .chip i:hover{color:var(--err)}
+  .opts{display:flex;gap:5px;flex-wrap:wrap;max-height:78px;overflow-y:auto;margin-bottom:6px}
+  .opt{border:1px dashed #ccc;background:#fff;border-radius:4px;padding:2px 7px;font-size:12px;color:#555}
+  .opt:hover{border-color:#000;color:#000}
+  .addrow{display:flex;gap:6px}
+  .addrow input{flex:1;padding:5px 8px;border:1px solid var(--line);border-radius:4px;font-size:12px;font-family:inherit}
+  .addrow button{padding:5px 10px;border:1px solid var(--line);background:#fff;border-radius:4px;font-size:12px}
+  /* ---------- 编辑器 ---------- */
+  #editorWrap{border:1px solid var(--line);border-radius:7px;overflow:hidden}
+  #editor{border:none}
+  /* ---------- 发布控制台 ---------- */
+  #console{
+    border-top:1px solid var(--line);background:#1c1c1c;color:#ddd;max-height:0;
+    overflow:hidden;transition:max-height .25s;flex:0 0 auto;
+  }
+  #console.open{max-height:270px}
+  #console pre{
+    margin:0;padding:12px 16px;max-height:270px;overflow:auto;
+    font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-all;
+  }
+  /* ---------- 提示 ---------- */
+  #toast{
+    position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);
+    background:#1c1c1c;color:#fff;padding:10px 18px;border-radius:6px;font-size:13px;
+    transition:transform .22s;z-index:99;max-width:70vw;
+  }
+  #toast.show{transform:translateX(-50%) translateY(0)}
+  #toast.err{background:var(--err)}
+  #toast.ok{background:var(--ok)}
+  .welcome{color:var(--muted);text-align:center;padding-top:80px}
+  .welcome h2{color:var(--text);font-weight:600;font-size:17px}
+  .welcome kbd{background:var(--soft);border:1px solid var(--line);border-radius:3px;padding:1px 5px;font-size:12px}
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <header>
+      <h1>文章管理</h1>
+      <button id="newBtn">＋ 新建文章</button>
+      <input id="q" placeholder="搜索标题 / 标签…">
+    </header>
+    <div id="list"></div>
+  </aside>
+
+  <section id="main">
+    <div id="bar">
+      <span class="fname" id="fname">未选择文章</span>
+      <span class="grow"></span>
+      <button class="btn" id="devBtn">本地预览</button>
+      <button class="btn danger" id="delBtn" disabled>删除</button>
+      <button class="btn" id="saveBtn" disabled>保存</button>
+      <button class="btn primary" id="pubBtn" disabled>保存并发布</button>
+    </div>
+
+    <div id="scroll">
+      <div class="welcome" id="welcome">
+        <h2>本地文章管理</h2>
+        <p>左边选一篇文章编辑，或新建一篇。</p>
+        <p style="font-size:13px">
+          保存只写本地文件；<b>保存并发布</b> 会构建、提交并推送到 GitHub Pages。<br>
+          发布前可先点 <b>本地预览</b> 在 <kbd>localhost:4321</kbd> 看成稿效果。
+        </p>
+      </div>
+
+      <div id="editorArea" style="display:none">
+        <div id="meta">
+          <div class="row">
+            <div class="fld">
+              <label>标题</label>
+              <input type="text" id="fTitle" placeholder="文章标题">
+            </div>
+            <div class="fld narrow">
+              <label>发布日期</label>
+              <input type="date" id="fDate">
+            </div>
+          </div>
+          <div class="row">
+            <div class="fld">
+              <label>摘要（可选，用于 SEO 和列表）</label>
+              <textarea id="fDesc" rows="2" placeholder="留空也可以"></textarea>
+            </div>
+          </div>
+          <div class="row">
+            <div class="fld">
+              <label>标签</label>
+              <div class="picker" id="tagPicker"></div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="fld">
+              <label>分类（可多级，顺序即层级：技术 › 前端）</label>
+              <div class="picker" id="catPicker"></div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="chk">
+              <input type="checkbox" id="fDraft">
+              <label for="fDraft" style="font-size:13px;color:var(--text)">草稿（不显示在网站上）</label>
+            </div>
+            <div class="fld narrow">
+              <label>更新日期（可选）</label>
+              <input type="date" id="fUpdated">
+            </div>
+          </div>
+        </div>
+
+        <div id="editorWrap"><div id="editor"></div></div>
+      </div>
+    </div>
+
+    <div id="console"><pre id="consoleOut"></pre></div>
+  </section>
+</div>
+<div id="toast"></div>
+<script src="/vendor/vditor/index.min.js"></script>
+<script>
+(function(){
+  'use strict';
+
+  var state = {
+    posts: [], taxonomy: {tags:[],categories:[]},
+    current: null,          // 当前文章对象（含 mtime）
+    dirty: false, saving: false, publishing: false,
+    logTimer: null, pollTimer: null
+  };
+
+  var $ = function(id){ return document.getElementById(id); };
+
+  function toast(msg, kind){
+    var t = $('toast');
+    t.textContent = msg;
+    t.className = 'show ' + (kind || '');
+    clearTimeout(t._t);
+    t._t = setTimeout(function(){ t.className = ''; }, kind === 'err' ? 6000 : 2800);
+  }
+
+  function api(path, opts){
+    opts = opts || {};
+    if (opts.body !== undefined){
+      opts.headers = Object.assign({'content-type':'application/json'}, opts.headers||{});
+      opts.body = JSON.stringify(opts.body);
+    }
+    return fetch(path, opts).then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(j){
+        if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+        return j;
+      });
+    });
+  }
+
+  // ------------------------------------------------------ 编辑器
+  var vd = null;
+  function initEditor(){
+    if (vd) return;
+    vd = new Vditor('editor', {
+      mode: 'ir',
+      height: 520,
+      minHeight: 320,
+      cache: { enable: false },
+      placeholder: '在这里写正文。分段直接回车即可，发布时会自动处理段落。',
+      lang: 'zh_CN',
+      cdn: '/vendor/vditor',
+      icon: 'ant',
+      theme: 'classic',
+      toolbarConfig: { pin: false },
+      toolbar: [
+        'headings','bold','italic','strike','|',
+        'list','ordered-list','check','|',
+        'quote','line','|',
+        'link','|',
+        'code','inline-code','|',
+        'undo','redo','|',
+        'fullscreen'
+      ],
+      preview: {
+        markdown: { toc: false, mark: false },
+        hljs: { style: 'github', lineNumber: false }
+      },
+      input: function(){ markDirty(true); }
+    });
+  }
+
+  function setBody(md){
+    initEditor();
+    vd.setValue(md || '');
+    // setValue 会触发 input，等它稳定后再清掉脏标记由调用方负责
+  }
+
+  function getBody(){
+    return vd ? vd.getValue() : '';
+  }
+
+  function markDirty(v){
+    state.dirty = !!v;
+    updateBar();
+  }
+
+  function updateBar(){
+    var has = !!state.current;
+    $('saveBtn').disabled = !has || state.saving || state.publishing;
+    $('pubBtn').disabled = !has || state.saving || state.publishing;
+    $('delBtn').disabled = !has || state.publishing;
+    $('fname').textContent = has ? state.current.slug + '.md' + (state.dirty ? ' •' : '') : '未选择文章';
+  }
+
+  // ------------------------------------------------------ 标签/分类选择器
+  function makePicker(rootId, getValues, setValues, opts){
+    var root = $(rootId);
+
+    function render(){
+      var picked = getValues();
+      root.innerHTML = '';
+
+      var pbox = document.createElement('div');
+      pbox.className = 'picked';
+      picked.forEach(function(v, i){
+        var c = document.createElement('span');
+        c.className = 'chip';
+        var b = document.createElement('b'); b.textContent = v;
+        var x = document.createElement('i'); x.textContent = '×';
+        x.title = '移除';
+        x.onclick = function(){
+          var next = picked.slice(); next.splice(i,1); setValues(next); render(); markDirty(true);
+        };
+        c.appendChild(b); c.appendChild(x);
+        pbox.appendChild(c);
+      });
+      root.appendChild(pbox);
+
+      var box = document.createElement('div');
+      box.className = 'opts';
+      var avail = (opts.list() || []).filter(function(v){ return picked.indexOf(v) < 0; });
+      if (!avail.length){
+        var s = document.createElement('span');
+        s.style.cssText = 'color:#bbb;font-size:12px';
+        s.textContent = opts.list().length ? '已全部选择' : '还没有已有项，下面新建一个';
+        box.appendChild(s);
+      }
+      avail.forEach(function(v){
+        var b = document.createElement('button');
+        b.className = 'opt'; b.type = 'button'; b.textContent = '+ ' + v;
+        b.onclick = function(){
+          setValues(picked.concat([v])); render(); markDirty(true);
+        };
+        box.appendChild(b);
+      });
+      root.appendChild(box);
+
+      var row = document.createElement('div');
+      row.className = 'addrow';
+      var inp = document.createElement('input');
+      inp.placeholder = opts.placeholder;
+      var btn = document.createElement('button');
+      btn.type = 'button'; btn.textContent = '新建';
+      function add(){
+        var v = inp.value.trim();
+        if (!v) return;
+        if (picked.indexOf(v) >= 0){ inp.value=''; return; }
+        setValues(picked.concat([v]));
+        inp.value = '';
+        render();
+        markDirty(true);
+      }
+      btn.onclick = add;
+      inp.onkeydown = function(e){ if (e.key === 'Enter'){ e.preventDefault(); add(); } };
+      row.appendChild(inp); row.appendChild(btn);
+      root.appendChild(row);
+    }
+
+    render();
+    return render;
+  }
+
+  var renderTags = null, renderCats = null;
+
+  // ------------------------------------------------------ 文章列表
+  function renderList(){
+    var q = $('q').value.trim().toLowerCase();
+    var box = $('list');
+    box.innerHTML = '';
+    var items = state.posts.filter(function(p){
+      if (!q) return true;
+      return (p.title + ' ' + p.tags.join(' ') + ' ' + p.categories.join(' ')).toLowerCase().indexOf(q) >= 0;
+    });
+    if (!items.length){
+      var e = document.createElement('div');
+      e.className = 'empty';
+      e.textContent = state.posts.length ? '没有匹配的文章' : '还没有文章，点上面新建一篇';
+      box.appendChild(e);
+      return;
+    }
+    items.forEach(function(p){
+      var d = document.createElement('div');
+      d.className = 'item' + (state.current && state.current.slug === p.slug ? ' active' : '');
+      var t = document.createElement('div');
+      t.className = 't';
+      if (p.draft){
+        var dot = document.createElement('span'); dot.className = 'draft-dot'; dot.title = '草稿';
+        t.appendChild(dot);
+      }
+      var nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = p.title;
+      t.appendChild(nm);
+      var m = document.createElement('div');
+      m.className = 'm';
+      m.textContent = (p.date || '无日期') + ' · ' + p.chars + ' 字'
+        + (p.tags.length ? ' · ' + p.tags.slice(0,3).join('/') : '');
+      d.appendChild(t); d.appendChild(m);
+      d.onclick = function(){ openPost(p.slug); };
+      box.appendChild(d);
+    });
+  }
+
+  function refresh(){
+    return api('/api/posts').then(function(d){
+      state.posts = d.posts;
+      state.taxonomy = d.taxonomy;
+      renderList();
+    });
+  }
+
+  // ------------------------------------------------------ 打开 / 新建
+  function fillForm(p){
+    $('fTitle').value = p.title || '';
+    $('fDate').value = p.date || '';
+    $('fUpdated').value = p.updated || '';
+    $('fDesc').value = p.description || '';
+    $('fDraft').checked = p.draft === true;
+
+    renderTags = makePicker('tagPicker',
+      function(){ return p.tags; },
+      function(v){ p.tags = v; },
+      { list: function(){ return state.taxonomy.tags; }, placeholder: '新建标签…' });
+
+    renderCats = makePicker('catPicker',
+      function(){ return p.categories; },
+      function(v){ p.categories = v; },
+      { list: function(){ return state.taxonomy.categories; }, placeholder: '新建分类（用 / 表示多级）…' });
+
+    setBody(p.body);
+  }
+
+  function openPost(slug){
+    if (state.dirty && !confirm('当前文章有未保存的修改，确定要丢弃吗？')) return;
+    api('/api/post?slug=' + encodeURIComponent(slug)).then(function(p){
+      // 分类用 / 连接，界面上显示为路径
+      p.categories = (p.categories || []).map(String);
+      state.current = p;
+      $('welcome').style.display = 'none';
+      $('editorArea').style.display = '';
+      fillForm(p);
+      // setValue 会触发 input 事件，稍后清掉脏标记
+      setTimeout(function(){ markDirty(false); }, 60);
+      renderList();
+      updateBar();
+    }).catch(function(e){ toast(e.message, 'err'); });
+  }
+
+  function newPost(){
+    if (state.dirty && !confirm('当前文章有未保存的修改，确定要丢弃吗？')) return;
+    var t = new Date();
+    var pad = function(n){ return String(n).padStart(2,'0'); };
+    var p = {
+      slug: null, title: '', description: '',
+      date: t.getFullYear() + '-' + pad(t.getMonth()+1) + '-' + pad(t.getDate()),
+      updated: '', tags: [], categories: [], draft: false, body: '', mtime: 0
+    };
+    state.current = p;
+    $('welcome').style.display = 'none';
+    $('editorArea').style.display = '';
+    fillForm(p);
+    setTimeout(function(){ markDirty(false); $('fTitle').focus(); }, 60);
+    renderList();
+    updateBar();
+    toast('已新建，填好标题和正文后点「保存」或「保存并发布」');
+  }
+
+  /** 收集表单 → 请求体 */
+  function collect(){
+    var p = state.current;
+    return {
+      slug: p.slug || undefined,
+      title: $('fTitle').value.trim(),
+      description: $('fDesc').value.trim(),
+      date: $('fDate').value,
+      updated: $('fUpdated').value,
+      tags: p.tags,
+      categories: p.categories,
+      draft: $('fDraft').checked,
+      body: getBody(),
+      mtime: p.mtime || undefined
+    };
+  }
+
+  function save(){
+    if (state.saving) return Promise.resolve(null);
+    var payload = collect();
+    if (!payload.title){ toast('请先填标题', 'err'); $('fTitle').focus(); return Promise.resolve(null); }
+    state.saving = true; updateBar();
+
+    return api('/api/post', { method: 'POST', body: payload }).then(function(r){
+      return refresh().then(function(){
+        return api('/api/post?slug=' + encodeURIComponent(r.slug));
+      }).then(function(fresh){
+        state.current = fresh;
+        fillForm(fresh);
+        setTimeout(function(){ markDirty(false); }, 60);
+        renderList(); updateBar();
+        toast(
+          (r.created ? '已新建 ' : '已保存 ') + r.slug + '.md' +
+          (r.normalized ? '（已自动规整段落）' : ''),
+          'ok'
+        );
+        return r;
+      });
+    }).catch(function(e){
+      toast(e.message, 'err');
+      return null;
+    }).then(function(r){
+      state.saving = false; updateBar();
+      return r;
+    });
+  }
+
+  function remove(){
+    var p = state.current;
+    if (!p || !p.slug) return;
+    if (!confirm('删除「' + ($('fTitle').value || p.slug) + '」？\n\n会移到 admin/.trash/ 回收站，可以手工恢复，但会从网站上移除。')) return;
+    api('/api/post?slug=' + encodeURIComponent(p.slug), { method: 'DELETE' }).then(function(r){
+      state.current = null;
+      $('editorArea').style.display = 'none';
+      $('welcome').style.display = '';
+      markDirty(false);
+      return refresh().then(function(){
+        renderList(); updateBar();
+        toast('已移入回收站：' + r.trash, 'ok');
+      });
+    }).catch(function(e){ toast(e.message, 'err'); });
+  }
+
+  // ------------------------------------------------------ 发布
+  function openConsole(){ $('console').classList.add('open'); }
+  function closeConsole(){ $('console').classList.remove('open'); }
+
+  function pollPublish(){
+    clearInterval(state.pollTimer);
+    state.pollTimer = setInterval(function(){
+      api('/api/publish').then(function(d){
+        $('consoleOut').textContent = d.log || '';
+        var pre = $('consoleOut');
+        pre.scrollTop = pre.scrollHeight;
+        if (!d.publishing){
+          clearInterval(state.pollTimer);
+          state.publishing = false;
+          updateBar();
+          $('saveBtn').disabled = !state.current;
+          $('newBtn').disabled = false;
+          // 成功后刷新列表（新文章会出现在本地 dist，但列表只读 blog 目录，无需刷新也可）
+        }
+      }).catch(function(){});
+    }, 700);
+  }
+
+  function publish(){
+    if (state.publishing) return;
+    var payload = collect();
+    if (!payload.title){ toast('请先填标题', 'err'); $('fTitle').focus(); return; }
+
+    var go = function(){
+      state.publishing = true; updateBar();
+      $('newBtn').disabled = true;
+      openConsole();
+      $('consoleOut').textContent = '正在保存并发布…\n';
+      api('/api/publish', { method: 'POST', body: { message: '更新文章：' + payload.title } })
+        .then(function(){
+          pollPublish();
+        })
+        .catch(function(e){
+          state.publishing = false; updateBar();
+          $('newBtn').disabled = false;
+          toast(e.message, 'err');
+        });
+    };
+
+    // 有未保存改动、或还是一篇没落盘的新文章 → 先保存再发布
+    if (state.dirty || !state.current.slug){
+      save().then(function(r){ if (r) go(); });
+    } else {
+      go();
+    }
+  }
+
+  // ------------------------------------------------------ 本地预览
+  function toggleDev(){
+    var running = $('devBtn').dataset.on === '1';
+    api('/api/dev', { method: 'POST', body: { action: running ? 'stop' : 'start' } })
+      .then(function(r){
+        $('devBtn').dataset.on = running ? '0' : '1';
+        $('devBtn').textContent = running ? '本地预览' : '停止预览';
+        toast(r.already ? '预览本来就没在运行' : (running ? '已停止本地预览' : '本地预览已启动：http://localhost:4321（首次编译需几秒）'), 'ok');
+      })
+      .catch(function(e){ toast(e.message, 'err'); });
+  }
+
+  // ------------------------------------------------------ 快捷键 & 事件
+  document.addEventListener('keydown', function(e){
+    var mod = e.ctrlKey || e.metaKey;
+    if (mod && e.key.toLowerCase() === 's'){ e.preventDefault(); if (state.current) save(); }
+    if (mod && e.key === 'Enter'){ e.preventDefault(); if (state.current) publish(); }
+  });
+  window.addEventListener('beforeunload', function(e){
+    if (state.dirty){ e.preventDefault(); e.returnValue = ''; }
+  });
+
+  ['fTitle','fDate','fUpdated','fDesc'].forEach(function(id){
+    $(id).addEventListener('input', function(){ markDirty(true); });
+  });
+  $('fDraft').addEventListener('change', function(){ markDirty(true); });
+  $('q').addEventListener('input', renderList);
+  $('newBtn').onclick = newPost;
+  $('saveBtn').onclick = save;
+  $('delBtn').onclick = remove;
+  $('pubBtn').onclick = publish;
+  $('devBtn').onclick = toggleDev;
+
+  // ------------------------------------------------------ 启动
+  refresh().then(function(){
+    if (state.posts.length) openPostFirst();
+  }).catch(function(e){
+    toast('无法连接本地服务：' + e.message, 'err');
+  });
+
+  function openPostFirst(){
+    var first = state.posts[0];
+    if (first) openPost(first.slug);
+  }
+})();
+</script>
+</body>
+</html>

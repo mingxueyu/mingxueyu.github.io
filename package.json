@@ -11,12 +11,17 @@
     "preview": "astro preview",
     "astro": "astro",
     "new": "bash scripts/new-post.sh",
-    "publish": "bash scripts/publish.sh"
+    "publish": "bash scripts/publish.sh",
+    "admin": "node admin/server.mjs",
+    "test": "node admin/test/normalize.test.mjs"
   },
   "dependencies": {
     "@astrojs/rss": "^4.0.19",
     "@supabase/supabase-js": "^2.110.1",
     "astro": "^7.0.0",
     "pagefind": "^1.5.2"
+  },
+  "devDependencies": {
+    "vditor": "^4.0.0"
   }
 }

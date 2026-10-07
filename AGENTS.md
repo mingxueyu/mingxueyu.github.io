@@ -35,6 +35,47 @@ python publish.py "提交说明"
 **已知边界**：若某段是长段落被 Obsidian 自动折行，且折行处恰好在句末标点之后，
 规则 A 会把它误判为段落边界。人工核对文章成稿仍是最可靠的一步。
 
+## 本地可视化管理界面
+
+```bash
+npm run admin     # 打开 http://127.0.0.1:4322
+```
+
+给作者用的增删改界面，避免手写 frontmatter / 记标签数组语法。零运行时依赖
+（只用 `node:` 内置模块），Vditor 编辑器作为 devDependency 从
+`node_modules/vditor/dist` 本地提供（**离线可用，且不进入部署产物**）。
+
+- `admin/server.mjs` — HTTP 服务，只监听 `127.0.0.1`，默认端口 4322（`--port` 可改）
+- `admin/lib/store.mjs` — 文章读写（frontmatter 解析/序列化、slug、回收站）
+- `admin/lib/normalize.mjs` — 段落归一化的 JS 版，**必须与 `publish.py` 保持同步**
+- `admin/public/index.html` — 界面（Vditor 即时渲染模式）
+- 文章直接读写 `src/content/blog/`（与 Astro 同一事实来源），不经过 `posts/` 中转
+- 删除是**软删除**：移到 `admin/.trash/<时间戳>/`，可手工恢复
+- 保存用 `mtime` 做乐观并发检查，冲突返回 409
+- 发布 = `git add -A` → 判断有无改动 → `git commit` → `npm run build` → `git push`，
+  日志实时显示在界面底部；**无改动时不会误报失败**
+- 界面里"保存并发布"会顺便规整段落（单换行 → 空行）并提示"已自动规整段落"
+
+### 两个必须知道的 Windows 坑
+
+1. **不要 spawn `npm.cmd`**。Node 24 加固后直接 spawn `.cmd` 会抛 `spawn EINVAL`
+   （`shell: true` 也不稳）。必须用当前 node 执行 npm 的 JS 入口：
+   `process.execPath` + `<nodeDir>/node_modules/npm/bin/npm-cli.js`。
+   见 `npmCommand()`。
+2. **git 推送要清空代理**。本机 V2Ray 代理未运行时 `git push` 会
+   `Connection was reset`。代码里统一用 `-c http.proxy= -c https.proxy=`，
+   详见 `CLAUDE-交接记录.md` 第五节。
+
+### 测试
+
+```bash
+npm test                              # 差分测试：JS 与 Python 段落归一化逐字节一致
+node admin/test/api.test.mjs          # 41 项接口/校验/软删除/并发检查（需服务在跑）
+node admin/test/publish.test.mjs      # 完整发布链路（会真实提交+推送，跑完自动 reset）
+```
+
+**改动任一侧的归一化规则后必须跑 `npm test`。**
+
 ## 内容与 frontmatter
 
 `src/content.config.ts` 定义了 blog collection 的 schema：

@@ -354,6 +354,12 @@ const server = http.createServer(async (req, res) => {
     }
 
     // ---- 静态：Vditor（从 node_modules 本地提供，离线可用） ----
+    //
+    // URL 结构说明（踩过坑）：Vditor 在代码里把资源拼成
+    //   "<cdn>/dist/js/lute/lute.min.js"、"<cdn>/dist/js/i18n/zh_CN.js"
+    // 而我们为了拿到未被改写的 index.min.js，必须把 cdn 指到 dist 目录本身。
+    // 于是真实文件位于 <dist>/js/...，但浏览器请求的是 /vendor/vditor/dist/js/...。
+    // 所以这里把 "/vendor/vditor/" 之后的 "dist/" 前缀剥掉再解析文件。
     if (req.method === 'GET' && path.startsWith('/vendor/vditor/')) {
       const dir = vendorDir();
       if (!existsSync(dir)) {
@@ -361,7 +367,8 @@ const server = http.createServer(async (req, res) => {
           error: '未安装 vditor。请先运行：npm install',
         });
       }
-      const full = resolveInside(dir, path.slice('/vendor/vditor/'.length));
+      const rel = path.slice('/vendor/vditor/'.length).replace(/^dist\//, '');
+      const full = resolveInside(dir, rel);
       if (full && serveFile(res, full, { cache: true })) return;
       res.writeHead(404).end('vendor asset not found');
       return;

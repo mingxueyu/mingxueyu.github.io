@@ -6,7 +6,7 @@
  * 不留痕迹。⚠️ 禁止在此脚本里使用 `git clean -x` 之类无路径限定的清理
  * （本项目曾因此误删 .env，见 CLAUDE-交接记录.md 第五节）。
  */
-import { readFileSync, existsSync, rmSync } from 'node:fs';
+import { readFileSync, existsSync, rmSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -58,10 +58,51 @@ console.log('[1] 健康检查与静态资源');
   const vd = await fetch(BASE + '/vendor/vditor/index.min.js');
   const vdText = await vd.text();
   check('Vditor 主脚本可加载', vd.status === 200 && vdText.length > 100000);
+  // 必须是原始 UMD 产物；若 cdn 指向错误会拿到 ESM 版（以 import 开头）而渲染失败
+  check('Vditor 主脚本是原始 UMD（非 ESM 版）', !/^import[\s{]/.test(vdText.trim()));
 
-  for (const p of ['/index.css', '/js/i18n/zh_CN.js', '/js/icons/ant.js', '/js/lute/lute.min.js']) {
-    const r = await fetch(BASE + '/vendor/vditor' + p);
-    check(`Vditor 资源 ${p}`, r.status === 200);
+  // Vditor 内部把资源拼成 "<cdn>/dist/js/..."，因此浏览器请求的是
+  // /vendor/vditor/dist/js/...，服务端需要剥掉 dist/ 前缀。这里遍历真实
+  // dist 目录逐个子资源验证，避免再次出现 "i18n 404 导致界面语言失效"。
+  {
+    const vdist = join(ROOT, 'node_modules', 'vditor', 'dist');
+    const walk = (dir) => {
+      const out = [];
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, e.name);
+        if (e.isDirectory()) out.push(...walk(full));
+        else out.push(full);
+      }
+      return out;
+    };
+    let files = [];
+    try {
+      files = walk(vdist).map((f) => f.slice(vdist.length + 1).replace(/\\/g, '/'));
+    } catch {
+      files = [];
+    }
+    const jsFiles = files.filter((f) => f.startsWith('js/'));
+    let bad = [];
+    for (const f of jsFiles) {
+      const r = await fetch(BASE + '/vendor/vditor/dist/' + encodeURI(f));
+      if (r.status !== 200) bad.push(f + ' → ' + r.status);
+    }
+    check(
+      `Vditor 全部 ${jsFiles.length} 个子资源（js/**）均可加载`,
+      bad.length === 0,
+      bad.slice(0, 5).join('; ')
+    );
+
+    // 关键三个：语言包、图标、Lute 渲染引擎——缺任一界面都会残废
+    const key = {
+      'js/i18n/zh_CN.js': 'VditorI18n',
+      'js/lute/lute.min.js': 'Lute',
+    };
+    for (const [rel, needle] of Object.entries(key)) {
+      const r = await fetch(BASE + '/vendor/vditor/dist/' + rel);
+      const t = await r.text();
+      check(`关键资源 ${rel} 内容正确`, r.status === 200 && t.includes(needle));
+    }
   }
 
   const trav = await fetch(BASE + '/vendor/vditor/../../../package.json');

@@ -56,7 +56,7 @@ npm run admin     # 打开 http://127.0.0.1:4322
   日志实时显示在界面底部；**无改动时不会误报失败**
 - 界面里"保存并发布"会顺便规整段落（单换行 → 空行）并提示"已自动规整段落"
 
-### 两个必须知道的 Windows 坑
+### 三个必须知道的坑（Windows / Vditor）
 
 1. **不要 spawn `npm.cmd`**。Node 24 加固后直接 spawn `.cmd` 会抛 `spawn EINVAL`
    （`shell: true` 也不稳）。必须用当前 node 执行 npm 的 JS 入口：
@@ -64,14 +64,24 @@ npm run admin     # 打开 http://127.0.0.1:4322
    见 `npmCommand()`。
 2. **git 推送要清空代理**。本机 V2Ray 代理未运行时 `git push` 会
    `Connection was reset`。代码里统一用 `-c http.proxy= -c https.proxy=`，
-   详见 `CLAUDE-交接记录.md` 第五节。
+   详见 `CLAUDE-交接记录.md` 第六节。
+3. **Vditor 静态资源的 URL 形状**（踩过，表现为浏览器 404
+   `vendor/vditor/dist/js/i18n/zh_CN.js`，界面语言/图标失效）。
+   Vditor 内部把子资源拼成 `<cdn>/dist/js/lute/lute.min.js`、
+   `<cdn>/dist/js/i18n/<lang>.js`；而为了拿到**未被改写的 UMD** `index.min.js`，
+   `cdn` 必须指到 dist 目录本身（指到 vditor 包根会拿到 ESM 版，浏览器里直接白屏）。
+   两者叠加意味着：真实文件在 `<dist>/js/...`，浏览器却请求
+   `/vendor/vditor/dist/js/...`。因此 `admin/server.mjs` 的 vendor 路由会
+   **剥掉 `dist/` 前缀**再解析文件。改这里必须跑 `api.test.mjs` 第 1 步 ——
+   它会遍历 dist 下全部 `js/**` 子资源逐个验证（当前 391 个），
+   并检查 zh_CN 语言包与 Lute 引擎的内容正确性。
 
 ### 测试
 
 ```bash
 npm test                              # 差分测试：JS 与 Python 段落归一化逐字节一致
-node admin/test/api.test.mjs          # 41 项接口/校验/软删除/并发检查（需服务在跑）
-node admin/test/publish.test.mjs      # 完整发布链路（会真实提交+推送，跑完自动 reset）
+node admin/test/api.test.mjs          # 42 项接口/校验/软删除/并发 + Vditor 资源全量校验（需服务在跑）
+node admin/test/publish.test.mjs --real   # 完整发布链路；默认不跑，会真实提交+推送
 ```
 
 **改动任一侧的归一化规则后必须跑 `npm test`。**

@@ -103,10 +103,22 @@ TypeError: Cannot read properties of undefined (reading 'currentMode')
 npm test                              # 差分测试：JS 与 Python 段落归一化逐字节一致
 npm run test:api                      # 42 项接口/校验/软删除/并发 + Vditor 资源全量校验（需服务在跑）
 npm run test:ui                       # headless Chrome 渲染监管界面（抓异步初始化类错误，需服务在跑）
+npm run test:interact                 # CDP 驱动真实浏览器测交互（如发布日志面板开合，需服务在跑）
 node admin/test/publish.test.mjs --real   # 完整发布链路；默认不跑，会真实提交+推送
 ```
 
 **改动任一侧的归一化规则后必须跑 `npm test`。**
+
+### 用 CDP 测交互（而不是 --dump-dom）
+
+`--dump-dom` 只能看首屏静态 DOM，**无法测点击后的行为**；headless 模式又不支持
+多 target，用 iframe 会报 "Multiple targets are not supported"。
+所以 `admin/test/cdp.mjs` 用 `--remote-debugging-port` + DevTools Protocol
+（Node 24 自带 WebSocket，零依赖）连到真实页面，可以 `Runtime.evaluate`
+执行 JS 并读回结果 —— 交互类 bug 只能这样测。
+
+`interact.test.mjs` 就是用它验证发布日志面板的开合。注意测 **CSS 过渡**
+要等动画走完（该面板 0.25s）再量尺寸，否则量到的是中间值。
 
 ## 内容与 frontmatter
 

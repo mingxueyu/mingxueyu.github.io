@@ -16,6 +16,7 @@
     "test": "node admin/test/normalize.test.mjs",
     "test:api": "node admin/test/api.test.mjs",
     "test:ui": "node admin/test/ui.test.mjs",
+    "test:interact": "node admin/test/interact.test.mjs",
     "sync": "node scripts/sync.mjs"
   },
   "dependencies": {

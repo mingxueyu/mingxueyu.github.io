@@ -100,7 +100,7 @@ CommonMark 把连续行并入同一个段落，连 `<br>` 都不生成，于是 
 `__pycache__/publish.cpython-311.pyc` 被 git 跟踪，而 `.gitignore` 没排除 `__pycache__/`。
 已在 `.gitignore` 补上并移除该文件。
 
-### 5. 未定义 CSS 变量 `--color-*` —— 待决 【中，线上可见】
+### 5. 未定义 CSS 变量 `--color-*` —— 已修复 【中，线上可见】
 
 `global.css` 的 `:root` 定义的是**无前缀**变量：`--bg` `--text` `--muted` `--accent`
 `--border` `--hover` `--radius` `--width`。
@@ -122,10 +122,13 @@ initial/inherit。具体后果：`color: var(--color-muted)` 无颜色声明 →
 没有变灰）；`background: var(--color-accent)` 无效 → 按钮**背景透明**（白底黑字，
 在毛玻璃背景上对比度不稳）；`background: var(--color-border)` 无效 → 次要按钮无底色。
 
-**未擅自修改的原因**：修法有取舍（是给 `global.css` 加一组 `--color-*` 别名，
-还是把 27 处引用改成无前缀变量），且会改变现有视觉，属于需要作者拍板的设计决定。
-**建议**：在 `global.css` 的 `:root` 里补一组别名（`--color-muted: var(--muted)` 等），
-一处改动即可让全部引用生效，且不动现有设计。
+**修复**（经作者确认）：在 `global.css` 的 `:root` 补一组别名
+（`--color-muted: var(--muted)` 等，共 6 个），一处改动让 27 处引用全部生效，
+且不改变现有黑白配色（`--accent` 本身就是 `#000`）。
+已实测构建产物 CSS 中六个别名均已输出。
+
+<!-- 历史备注：本项原记录为"待决"，修法曾在"补别名"与"改 27 处引用"之间取舍，
+     作者选择补别名（改动最小、不动现有设计）。 -->
 
 ### 6. 新文章的分类与标签为空 —— 待作者决定 【低】
 
@@ -142,18 +145,60 @@ initial/inherit。具体后果：`color: var(--color-muted)` 无颜色声明 →
 2. 确认无 Claude 记忆可继承，并说明依据（见第一节）。
 3. 适配记忆文件：把项目知识集中写进 `AGENTS.md`（DSH 读取的标准文件），
    `CLAUDE.md` 改为指向 `AGENTS.md` 并说明 `.claude/` 现状，去掉失效的 `@` 导入。
-4. 修复第 1–4 项问题，重建并实测验证（数 `<p>` / `<h1>` / `<h2>` 标签）。
+4. 修复第 1–5 项问题，重建并实测验证（数 `<p>` / `<h1>` / `<h2>` 标签、
+   核对构建产物里的 CSS 变量）。
+
+提交记录：
+
+| 提交 | 内容 | 线上部署 |
+|------|------|----------|
+| `32500a4` | 段落归一化 + 修正两篇正文 + `publish.py` 三处修复 + 记忆文件适配 | run #41 ✅ |
+| `ec9efab` | `global.css` 补 `--color-*` 别名 | run #42 ✅ |
+
+两个 run 的 `conclusion` 均为 `success`（经 GitHub Actions API 核实）。
 
 未做（等你决定）：
 
-- 第 5 项 `--color-*` 变量修复（涉及视觉，见上）。
-- 第 6 项补分类/标签（内容决定）。
-- 未清理 `main-switch` 遗留分支。
-- 未重新生成 `博客写作语法规则.pdf`：`.md` 里"发布流程"一节仍写
-  `python publish.py`，未提及新的自动段落归一化。需要同步时重新导出 PDF。
+- 第 6 项补分类/标签：你选择自己来定。字段位置就是文章 frontmatter 的
+  `tags: [...]` 与 `categories: [...]`（见 `AGENTS.md` 的字段表）；
+  填好后跑一次 `python publish.py "更新文章"` 即可。
+- 未清理 `main-switch` 遗留分支（停在 `0b0a14a`）。
+- 未重新生成 `博客写作语法规则.pdf`：`.md` 里"发布流程"一节未提及新的自动
+  段落归一化。需要同步时重新导出 PDF。
 - 未启动 dev server（按约定只在明确要求时启动）。
 
-## 五、两个工具并存时的注意点
+## 五、本机环境问题：失效的代理（会挡住 git push）
+
+**症状**：`git push` 报 `fatal: unable to access '...': Recv failure: Connection was reset`。
+
+**根因**：本机配了一个 V2Ray 混合代理 `127.0.0.1:10808`，但**代理进程没在运行**
+（实测该端口未监听）。它通过三处配置生效，互相独立：
+
+| 位置 | 内容 | 影响 |
+|------|------|------|
+| `git config --global http.proxy` / `https.proxy` | `http://127.0.0.1:10808` | 挡住 `git push` / fetch |
+| `~/.curlrc` | `proxy = "http://127.0.0.1:10808"` | 挡住 `curl` |
+| 注册表 `HKCU:\...\Internet Settings` | `ProxyEnable=1`, `ProxyServer=127.0.0.1:10808` | 影响走系统代理的程序 |
+
+**绕过办法**（不改动你的全局配置）：
+
+```bash
+# git：本次命令内清空代理
+git -c http.proxy= -c https.proxy= push origin main
+
+# curl：忽略 .curlrc
+curl -q ...
+```
+
+**本次处理**：只做了绕过，**没有**改动上述三处配置 —— 因为如果你的代理软件之后
+启动，这些配置是正常的，擅自删除反而会破坏你的正常用法。
+
+> 补充：`curl` 即使绕过代理，访问 HTTPS 仍可能失败并报
+> `schannel: CRYPT_E_REVOCATION_OFFLINE`（证书吊销列表服务器被墙）。
+> 因此本环境**无法用 curl 直接核验线上页面**；线上验证改用
+> GitHub Actions API 查部署结论（`conclusion: success`）配合本地 `dist/` 检查。
+
+## 六、两个工具并存时的注意点
 
 - **DSH 读 `AGENTS.md`**；Claude Code 读 `CLAUDE.md`。项目知识只维护在 `AGENTS.md`，
   `CLAUDE.md` 只保留指针，避免两边说法漂移。

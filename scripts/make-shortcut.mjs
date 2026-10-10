@@ -1,66 +1,85 @@
 /**
- * 生成"文章管理"桌面快捷方式（以及开始菜单项）。
+ * 生成「文章管理」快捷方式（桌面 + 开始菜单）。
  *
- * 双击桌面图标 = 启动服务 + 自动打开浏览器，全程无黑窗口。
- * 用 WScript.Shell COM 创建 .lnk；通过 powershell -EncodedCommand 传递
- * UTF-16LE 脚本，避免中文路径在命令行上被代码页搞坏。
+ * 设计变更（重要）：快捷方式**直接指向 node + scripts/launch-admin.mjs**，
+ * 不再经过 .vbs。
  *
- * 用法：npm run shortcut              创建/更新
- *       npm run shortcut -- --remove  删除
+ * 为什么去掉 .vbs：它要求文件是 UTF-16LE + BOM，且 WshShell.Run 以隐藏窗口
+ * 方式拉起 .cmd 的整条链路表现不稳定 —— 实测出现过"服务其实起来了，但双击
+ * 没有任何可见反馈"，非常难排查。少一层中间件就少一类故障。
+ *
+ * 代价：会出现一个极短的控制台窗口（node 启动瞬间）。服务本身以
+ * detached + windowsHide 运行，不会留下常驻窗口。
+ *
+ * 用法：npm run shortcut               创建/更新
+ *       npm run shortcut -- --remove   删除
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const REMOVE = process.argv.includes('--remove');
 
-const vbsTarget = join(ROOT, '启动文章管理.vbs'); // 无窗口启动
-if (!existsSync(vbsTarget)) {
-  console.error('✗ 找不到 ' + vbsTarget);
+const nodeExe = process.execPath; // 当前跑 npm 的这个 node，最可靠
+const launcher = join(ROOT, 'scripts', 'launch-admin.mjs');
+
+if (!existsSync(launcher)) {
+  console.error('✗ 找不到 ' + launcher);
   process.exit(1);
 }
 
 const userProfile = process.env.USERPROFILE || '';
 const appData = process.env.APPDATA || '';
 
+/** [快捷方式路径, 目标, 参数, 窗口样式(1=正常 7=最小化), 说明] */
 const links = [
-  join(userProfile, 'Desktop', '文章管理.lnk'),
-  join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', '文章管理.lnk'),
-].filter(Boolean);
+  [join(userProfile, 'Desktop', '文章管理.lnk'), nodeExe, `"${launcher}"`, 7, 'my-blog article manager'],
+  [
+    join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', '文章管理.lnk'),
+    nodeExe,
+    `"${launcher}"`,
+    7,
+    'my-blog article manager',
+  ],
+];
 
-const psQuote = (s) => "'" + String(s).replace(/'/g, "''") + "'";
+const q = (s) => "'" + String(s).replace(/'/g, "''") + "'";
 
-let ps;
-if (REMOVE) {
-  ps = links.map((l) => `if (Test-Path ${psQuote(l)}) { Remove-Item -LiteralPath ${psQuote(l)} -Force }`).join('\n');
-} else {
-  ps = [
-    '$ws = New-Object -ComObject WScript.Shell',
-    ...links.map((l) => {
-      const dir = dirname(l);
-      return [
-        `$dir = ${psQuote(dir)}`,
-        'if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }',
-        `$s = $ws.CreateShortcut(${psQuote(l)})`,
-        `$s.TargetPath = ${psQuote(vbsTarget)}`,
-        `$s.WorkingDirectory = ${psQuote(ROOT)}`,
-        `$s.Description = 'my-blog article manager'`,
-        `$s.IconLocation = '%SystemRoot%\\System32\\shell32.dll,70'`,
-        '$s.Save()',
-      ].join('\n');
-    }),
-  ].join('\n');
-}
-
-// -EncodedCommand 接受 UTF-16LE 的 base64，中文路径不会被代码页破坏
-const encoded = Buffer.from(ps, 'utf16le').toString('base64');
+const ps = REMOVE
+  ? links
+      .map(([p]) => `if (Test-Path -LiteralPath ${q(p)}) { Remove-Item -LiteralPath ${q(p)} -Force }`)
+      .join('\n')
+  : [
+      '$ws = New-Object -ComObject WScript.Shell',
+      ...links.map(([p, target, args, style, desc]) => {
+        const dir = dirname(p);
+        return [
+          `$dir = ${q(dir)}`,
+          'if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }',
+          `$s = $ws.CreateShortcut(${q(p)})`,
+          `$s.TargetPath = ${q(target)}`,
+          `$s.Arguments = ${q(args)}`,
+          `$s.WorkingDirectory = ${q(ROOT)}`,
+          `$s.Description = ${q(desc)}`,
+          `$s.WindowStyle = ${style}`,
+          `$s.IconLocation = '%SystemRoot%\\System32\\shell32.dll,70'`,
+          '$s.Save()',
+        ].join('\n');
+      }),
+    ].join('\n');
 
 try {
   execFileSync(
     'powershell',
-    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
+    [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-EncodedCommand',
+      Buffer.from(ps, 'utf16le').toString('base64'),
+    ],
     { stdio: ['ignore', 'pipe', 'pipe'] }
   );
 } catch (e) {
@@ -73,16 +92,19 @@ if (REMOVE) {
 } else {
   console.log('\n✓ 快捷方式：');
   let ok = 0;
-  for (const l of links) {
-    const exists = existsSync(l);
+  for (const [p] of links) {
+    const exists = existsSync(p);
     if (exists) ok++;
-    console.log('   ' + (exists ? '✓' : '✗') + ' ' + l);
+    console.log('   ' + (exists ? '✓' : '✗') + ' ' + p);
   }
-  if (ok === 0) {
-    console.error('\n没有创建成功，请检查上面的错误信息。');
+  if (!ok) {
+    console.error('\n没有创建成功。');
     process.exit(1);
   }
-  console.log('\n  双击桌面上的「文章管理」即可启动并自动打开浏览器。');
+  console.log('\n  目标 : ' + nodeExe);
+  console.log('  参数 : "' + launcher + '"');
+  console.log('  目录 : ' + ROOT);
+  console.log('\n  双击桌面「文章管理」→ 启动服务并自动打开浏览器。');
   console.log('  停止服务：双击项目里的 停止文章管理.cmd');
 }
 console.log('');

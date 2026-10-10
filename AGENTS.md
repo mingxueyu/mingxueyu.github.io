@@ -51,29 +51,37 @@ npm run shortcut  # 在桌面和开始菜单创建「文章管理」快捷方式
 
 | 文件 | 作用 |
 |------|------|
-| `启动文章管理.vbs` | **双击这个**：无黑窗口，后台起服务并自动开浏览器 |
-| `启动文章管理.cmd` | 同上但会显示控制台窗口（排查问题用） |
+| 桌面「文章管理」快捷方式 | **双击这个**：启动服务 + 自动开浏览器 |
+| `启动文章管理.cmd` | 会显示控制台窗口的版本（排查问题用） |
 | `停止文章管理.cmd` | 按端口找到进程并结束 |
-| `scripts/launch-admin.mjs` | 真正的启动逻辑（定位 node → 复用/拉起 → 等 health → 开浏览器）|
+| `scripts/launch-admin.mjs` | 真正的启动逻辑（复用/拉起 → 等 health → 开浏览器）|
 | `scripts/make-shortcut.mjs` | 生成桌面 / 开始菜单 `.lnk` |
 
-启动逻辑刻意放在 Node 里而不是批处理：.cmd 做轮询等待时每轮都要起一个进程，
-还夹着 ping 延时，又慢又脆弱。Node 侧用 `spawn(detached:true, stdio:'ignore')`
-拉起服务，父进程退出后服务继续存活，然后轮询 `/api/health` 直到就绪。
+**快捷方式直接指向 `node.exe` + `scripts/launch-admin.mjs`，不经过任何中间脚本。**
 
-**三个必须知道的编码 / 路径坑（都踩过）**：
+早期版本用 `.vbs` 做"无窗口启动"，已移除：它要求文件是 UTF-16LE + BOM，且
+`WshShell.Run` 隐藏窗口拉起 `.cmd` 的整条链路表现不稳定 —— 实测出现过
+"服务其实起来了，但双击没有任何可见反馈"，极难排查（`.vbs` 编码一旦坏掉会
+**静默什么都不做**）。少一层中间件就少一类故障。代价是启动瞬间有一个极短的
+控制台窗口（`WindowStyle=7` 最小化）；服务本身是 detached + windowsHide，
+不会留下常驻窗口。
 
-1. **`.vbs` 必须是 UTF-16LE + BOM**。WSH 只有在 UTF-16 下才可靠解析非 ASCII
-   字面量；存成 ANSI/UTF-8 时脚本里的 `"启动文章管理.cmd"` 变乱码，
-   `FileExists` 返回 False，于是**静默什么都不做** —— 双击快捷方式毫无反应，
-   极难排查。用 `node scripts/write-launcher-vbs.mjs` 重新生成（带自检）。
-2. **`.cmd` 必须是纯 ASCII + CRLF**。cmd.exe 按当前代码页解析文件，
-   非 ASCII 注释可能直接把语法搞坏（见过 `was unexpected at this time`）。
-   所以这些脚本里的提示信息一律用英文。
-3. **`start` 不会可靠继承当前目录**。用相对路径 `admin\server.mjs` 时，
-   实际会去 `D:\admin\server.mjs` 找（真实报错：`Cannot find module`）。
-   必须传绝对路径 + `/d "%ROOT%"`；`server.mjs` 自身也已改成基于
-   `import.meta.url` 定位（不依赖 cwd）。
+启动逻辑刻意放在 Node 里而不是批处理：`.cmd` 做轮询等待时每轮都要起一个进程、
+还夹着 ping 延时，又慢又脆弱。Node 侧用
+`spawn(detached:true, stdio:'ignore', windowsHide:true)` 拉起服务，父进程退出后
+服务继续存活，然后轮询 `/api/health` 直到就绪再开浏览器。
+
+**两个必须知道的坑（都踩过）**：
+
+1. **`.cmd` 必须是纯 ASCII + CRLF**。cmd.exe 按当前代码页解析文件，非 ASCII
+   注释可能直接把语法搞坏（见过 `was unexpected at this time`）。启动/停止脚本
+   里的提示信息一律用英文，新增 `.cmd` 请沿用。
+2. **`start` 不会可靠继承当前目录**。用相对路径 `admin\server.mjs` 时，实际会去
+   `D:\admin\server.mjs` 找（真实报错 `Cannot find module`）。必须传绝对路径；
+   `server.mjs` 自身也已改成基于 `import.meta.url` 定位（不依赖 cwd）。
+
+`.gitattributes` 对 `*.cmd` 锁定 `eol=crlf`：本仓库开着 `core.autocrlf=true`，
+不加这条会在 checkout 时改写行尾。
 
 ### 服务端要点
 

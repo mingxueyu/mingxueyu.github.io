@@ -1,12 +1,9 @@
-# 启动器脚本对行尾/编码很敏感，禁止 git 做任何转换。
+# 启动器脚本对行尾敏感，禁止 git 做转换。
 # 详见 AGENTS.md「一键启动的入口」一节。
-
-# .cmd 必须是纯 ASCII + CRLF，否则 cmd.exe 按代码页解析会出错
+#
+# 本仓库开着 core.autocrlf=true，不加这条会在 checkout 时改写行尾，
+# 而 .cmd 依赖稳定的 CRLF。
 *.cmd text eol=crlf
 
-# .vbs 是 UTF-16LE + BOM 的二进制文件；一旦被当成文本转换，
-# BOM 与中文字面量都会损坏，双击快捷方式将静默失效
-*.vbs binary
-
-# .lnk 由脚本生成，不应入库（这里只是防御）
+# .lnk 由 npm run shortcut 生成，不应入库（这里只是防御）
 *.lnk binary

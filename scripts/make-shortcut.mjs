@@ -34,13 +34,16 @@ const userProfile = process.env.USERPROFILE || '';
 const appData = process.env.APPDATA || '';
 
 /** [快捷方式路径, 目标, 参数, 窗口样式(1=正常 7=最小化), 说明] */
+// 窗口样式刻意用 1（正常）而不是 7（最小化）：
+// 最小化窗口会让启动信息一闪而过，用户既看不到状态也看不到访问地址，
+// 出问题时报不出任何线索。宁可留一个可读的小窗口。
 const links = [
-  [join(userProfile, 'Desktop', '文章管理.lnk'), nodeExe, `"${launcher}"`, 7, 'my-blog article manager'],
+  [join(userProfile, 'Desktop', '文章管理.lnk'), nodeExe, `"${launcher}"`, 1, 'my-blog article manager'],
   [
     join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', '文章管理.lnk'),
     nodeExe,
     `"${launcher}"`,
-    7,
+    1,
     'my-blog article manager',
   ],
 ];

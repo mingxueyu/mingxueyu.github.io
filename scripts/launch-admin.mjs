@@ -9,7 +9,7 @@
  *
  * 用法：node scripts/launch-admin.mjs [--port 4322] [--no-open]
  */
-import { spawn, execFile } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -45,17 +45,24 @@ function openBrowser(url) {
     console.log('  (--no-open) ' + url);
     return;
   }
+  // 用 spawnSync 而不是 execFile：url.dll 的协议处理器是**异步**的，
+  // 之前 execFile + 紧接着 process.exit() 会在它真正生效前把进程回收掉，
+  // 表现为"什么都没发生"。spawnSync 只等它把请求派发出去（很快），
+  // 但能确保派发完成。
   try {
     if (process.platform === 'win32') {
-      // 用 rundll32 打开默认浏览器：不产生控制台窗口，也不等待
-      execFile('rundll32.exe', ['url.dll,FileProtocolHandler', url], { windowsHide: true }, () => {});
+      spawnSync('rundll32.exe', ['url.dll,FileProtocolHandler', url], {
+        windowsHide: true,
+        timeout: 10000,
+      });
     } else if (process.platform === 'darwin') {
-      spawn('open', [url], { detached: true, stdio: 'ignore' }).unref();
+      spawnSync('open', [url], { timeout: 10000 });
     } else {
-      spawn('xdg-open', [url], { detached: true, stdio: 'ignore' }).unref();
+      spawnSync('xdg-open', [url], { timeout: 10000 });
     }
   } catch (e) {
-    console.log('  无法自动打开浏览器，请手动访问：' + url);
+    console.log('  无法自动打开浏览器：' + e.message);
+    console.log('  请手动访问：' + url);
   }
 }
 
@@ -65,22 +72,29 @@ if (!existsSync(server)) {
   process.exit(1);
 }
 
+const line = '  ' + '-'.repeat(46);
 console.log('');
-console.log('  my-blog - article manager');
-console.log('  ----------------------------------------');
-console.log('  port : ' + PORT);
+console.log(line);
+console.log('   my-blog  文章管理');
+console.log(line);
+console.log('   端口 : ' + PORT);
 
 // ---- 1) 已经在跑？ ----
 if (await healthy()) {
-  console.log('  state: already running');
+  console.log('   状态 : 服务已在运行');
+  console.log(line);
   console.log('');
-  console.log('  opening ' + URL);
+  console.log('   正在打开浏览器：');
+  console.log('   ' + URL);
+  console.log('');
+  console.log('   （若浏览器没反应，请手动复制上面的地址打开）');
+  console.log('');
   openBrowser(URL);
   process.exit(0);
 }
 
 // ---- 2) 后台拉起服务 ----
-console.log('  state: starting ...');
+console.log('   状态 : 正在启动服务 …');
 const child = spawn(process.execPath, [server, '--port', String(PORT)], {
   cwd: ROOT,
   detached: true,          // 脱离父进程，启动器退出后服务继续活着
@@ -93,25 +107,42 @@ child.unref();
 let ok = false;
 for (let i = 0; i < 100; i++) {
   await sleep(200);
-  if (await healthy()) { ok = true; break; }
+  if (await healthy()) {
+    ok = true;
+    break;
+  }
   if (child.exitCode !== null && child.exitCode !== 0 && i > 5) {
     // 进程已经退出且健康检查一直失败，不必再等
-    console.error('  服务启动失败（退出码 ' + child.exitCode + '）。');
-    console.error('  常见原因：端口被占用、依赖未安装（npm install）。');
+    console.log(line);
+    console.error('   状态 : 启动失败（退出码 ' + child.exitCode + '）');
+    console.error('');
+    console.error('   常见原因：');
+    console.error('     · 端口 ' + PORT + ' 被别的程序占用');
+    console.error('     · 依赖未安装 —— 在项目目录运行 npm install');
+    console.error('');
     process.exit(1);
   }
 }
 
 if (!ok) {
-  console.error('  等待服务就绪超时，请检查：node admin/server.mjs --port ' + PORT);
+  console.log(line);
+  console.error('   状态 : 等待服务就绪超时');
+  console.error('   手动排查：node admin/server.mjs --port ' + PORT);
   process.exit(1);
 }
 
-console.log('  state: ready');
+console.log('   状态 : 已就绪');
+console.log(line);
 console.log('');
-console.log('  opening ' + URL);
+console.log('   正在打开浏览器：');
+console.log('   ' + URL);
+console.log('');
+console.log('   （若浏览器没反应，请手动复制上面的地址打开）');
+console.log('');
+console.log('   停止服务：双击  停止文章管理.cmd');
+console.log('');
 openBrowser(URL);
-console.log('');
-console.log('  停止服务：双击 停止文章管理.cmd');
-console.log('');
+
+// 留一点时间让地址在屏幕上可见，避免窗口"一闪而过"
+await sleep(2500);
 process.exit(0);

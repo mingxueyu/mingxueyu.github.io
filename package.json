@@ -19,7 +19,9 @@
     "test:api": "node admin/test/api.test.mjs",
     "test:ui": "node admin/test/ui.test.mjs",
     "test:interact": "node admin/test/interact.test.mjs",
-    "sync": "node scripts/sync.mjs"
+    "sync": "node scripts/sync.mjs",
+    "pdf": "node scripts/export-rules-pdf.mjs",
+    "pdf:check": "node scripts/check-rules-pdf.mjs"
   },
   "dependencies": {
     "@astrojs/rss": "^4.0.19",
@@ -28,6 +30,7 @@
     "pagefind": "^1.5.2"
   },
   "devDependencies": {
+    "marked": "^18.1.0",
     "vditor": "^4.0.0"
   }
 }

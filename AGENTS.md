@@ -151,6 +151,36 @@ TypeError: Cannot read properties of undefined (reading 'currentMode')
 确实出现在渲染结果里。已用变异测试确认：把 `setBody()` 退回旧写法，
 该测试会以同样的 currentMode 报错失败。
 
+### 写作规范 PDF 的导出
+
+`博客写作语法规则.md` 是给作者看的写作规范，仓库里另有一份 PDF 方便转发。
+**单一事实来源是 .md**，PDF 与 HTML 都由脚本生成，不要手改：
+
+```bash
+npm run pdf         # md → HTML → PDF（用 Chrome --print-to-pdf）
+npm run pdf:check   # 校验导出完整性
+```
+
+- `scripts/export-rules-pdf.mjs` — 用 `marked` 转 HTML，再用 Chrome 打印成 PDF。
+  之所以用 Chrome：这台机器上没有任何 PDF 工具链（无 pandoc / wkhtmltopdf /
+  weasyprint / reportlab），而 Chrome 对中文支持最好，会把 Microsoft YaHei
+  子集嵌进 PDF，换机器也不会变方块。
+- `博客写作语法规则.html` 是中间产物，已 gitignore。
+- `scripts/verify-pdf.mjs` — 通用 PDF 校验器：解压内容流 + 解析 ToUnicode CMap，
+  反查实际写入的字符，确认中文与字体都嵌入了。
+
+**校验分两层，各查各能查准的**（`pdf:check` 已实现）：
+
+1. **内容层（精确）**：md 的每个标题 / 表格单元格 / 代码块是否都进了 HTML。
+   这一层用精确字符串比对（注意先把 HTML 摊平成纯文本，否则 markdown 的行内
+   代码会被渲染成 `<code>` 标签而失配）。
+2. **PDF 层（结构性）**：页数、内嵌字体数、反查字符规模。
+
+**PDF 层刻意不做逐字校验**：PDF 文字是多个字体子集混排的，用 ToUnicode CMap
+反查时，同一行里切换字体处的个别字会反查不准（实测 "开始" 被反查成 "建始"）。
+那是校验脚本的精度问题，不是 PDF 的问题 —— 所以这一层只断言结构。
+视觉排版用 HTML 截图人工确认。
+
 ### 测试
 
 ```bash

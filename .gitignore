@@ -45,3 +45,5 @@ pnpm-debug.log*
 # recall plugin
 .claude/recall-context.md
 
+# PDF 导出的中间产物（用 npm run pdf 重新生成）
+博客写作语法规则.html
